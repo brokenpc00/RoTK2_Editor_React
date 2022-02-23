@@ -14,10 +14,15 @@ import {
     Typography
 } from '@material-ui/core';
 
+import {Add} from '@material-ui/icons';
 
 import Page from '../../../core/controls/Page';
 import { T } from '../../../core/utility';
 import { useTable } from "react-table";
+// import { UsersCellPlainText } from './usersCellPlainText';
+
+import fileDownload from 'js-file-download';
+
 
 const useStyles = makeStyles((theme)=>
     createStyles({
@@ -27,6 +32,9 @@ const useStyles = makeStyles((theme)=>
     }),
 );
 
+function getBaseLog(x, y) {
+    return Math.log(y) / Math.log(x);
+  }
 
 const parsePersonalData = (data, isKor=true) => {
     let pos = 0;
@@ -57,6 +65,7 @@ const parsePersonalData = (data, isKor=true) => {
         0x40 : 전투중 배신 약속된 상태
         0x80 : 아이템 받은 상태 (일시적으로 충성도 하락에 면역)
     */
+   let tmp = 0;
     const health = data[pos++]; // 80이면 아이템 가진상태...
     //지력
     const int = data[pos++];
@@ -71,7 +80,9 @@ const parsePersonalData = (data, isKor=true) => {
     //야망
     const amb = data[pos++];
     //모름
-    pos++;
+    tmp = data[pos++]+1;
+    const lordNum = tmp===256?0:tmp;
+    // pos++;
     //충성
     const loyalty = data[pos++];
     //사관
@@ -79,13 +90,13 @@ const parsePersonalData = (data, isKor=true) => {
     //침투... 안했으면 0xff
     const hide = data[pos++];
     //모름... 침투 하면 값이 변경되긴 함.
-    pos++;
+    const unknown2 = data[pos++];
+    // pos++;
     //상성
     const syn = data[pos++];
     //모름
-    pos++;
-    //모름
-    pos++;
+    tmp = (data[pos++] | data[pos++] << 8)
+    const family = tmp===0?tmp:getBaseLog(2, tmp)+1;
     //병사
     const army = data[pos++] | data[pos++] << 8;
     //무장
@@ -93,9 +104,11 @@ const parsePersonalData = (data, isKor=true) => {
     //훈련
     const train = data[pos++];
     //모름
-    pos++;
+    const unknown5 = data[pos++];
+    // pos++;
     //모름
-    pos++;
+    const unknown6 = data[pos++];
+    // pos++;
     //생년
     const birth = data[pos++];
     //얼굴
@@ -112,6 +125,7 @@ const parsePersonalData = (data, isKor=true) => {
         name = new TextDecoder().decode(data.slice(pos, pos+17));
         pos += 17;
     }
+    // name = '';
 
 
     return {
@@ -136,6 +150,11 @@ const parsePersonalData = (data, isKor=true) => {
         faceMainId,
         faceSubId,
         name,
+        lordNum,
+        unknown2,
+        family,
+        unknown5,
+        unknown6,
     }
 };
 
@@ -149,7 +168,7 @@ const parseCountryData = (data, isKor=true) => {
     // 태수 하위
     const govLow = data[pos++];
     // 태수 상위
-    const govUpper = data[pos++];
+    const govHigh = data[pos++];
     // 재야장수 하위
     const freeAgentLow = data[pos++];
     // 재야장수 상위
@@ -185,7 +204,7 @@ const parseCountryData = (data, isKor=true) => {
         nextCityLow,
         nextCityUpper,
         govLow,
-        govUpper,
+        govHigh,
         freeAgentLow,
         freeAgentUpper,
         hideAgentLow,
@@ -228,6 +247,8 @@ export default (props) => {
     const [faceRawData, setFaceRawData] = useState([]);
 
     const [drawAllFace, setDrawAllFace] = useState(false);
+
+    const [,forceRender] = useState({})
 
 
     useEffect(()=>{
@@ -275,14 +296,30 @@ export default (props) => {
         // setFaceImage('http://localhost:3325/sam2face');
     }, []);
 
-    useEffect(()=> {
-        if (faceLoadComplete) {
+    useEffect(()=>{
+        if (!faceLoadComplete) {
+            // hexdata.dat 15,108
+            // GRPDATA.DAT 46,715
+            fetch('http://192.168.10.33:3325/kaodata').then(r => {
+
+                const reader = r.body.getReader();
+
+                reader.read().then(({done, value})=>{
+                    setFaceRawData(value);
+                    setFaceLoadComplete(true);
+                }).catch(e=>{
+                    setFaceRawData([]);
+                });
+            });
+        } else {
             // let faceData = faceRawData.slice();
-            var canvas = document.getElementById(`allOfficer`);
+            return;
+            var canvas = document.getElementById('allOfficer');
             var ctx = canvas.getContext('2d');
             let posX = 0;
             let posY = 0;
             const totalGenericCount = 219;
+            // const totalGenericCount = 276;
             for (let i=1; i<=totalGenericCount; i++) {
                 const faceData = getFaceData(i);
                 var imgData = ctx.createImageData(64, 80); // imgData.data 10240 elements
@@ -296,25 +333,6 @@ export default (props) => {
                 ctx.putImageData(imgData, posX*64, 80*posY);
                 posX++;
             }
-        }
-    }, [faceLoadComplete]);
-
-    useEffect(()=>{
-        if (!faceLoadComplete) {
-            // hexdata.dat 15,108
-            // GRPDATA.DAT 46,715
-            // KAODATA.DAT 210,240
-            fetch('http://localhost:3325/kaodata').then(r => {
-
-                const reader = r.body.getReader();
-
-                reader.read().then(({done, value})=>{
-                    setFaceRawData(value);
-                    setFaceLoadComplete(true);
-                }).catch(e=>{
-                    setFaceRawData([]);
-                });
-            });
         }
     }, [faceLoadComplete]);
 
@@ -533,10 +551,18 @@ export default (props) => {
             var ctx = canvas.getContext('2d');
             if (faceRawData.length>0) {
 
-                if (row.original.faceSubId>=0x80 && row.original.faceSubId<=0xff) {
+                if (row.original.faceSubId>=0x01 && row.original.faceSubId<=0xff) {
                     console.log(`]]]]] main face id : ${row.original.faceMainId}, sub face Id : ${row.original.faceSubId}`);
                     return (
-                        <>{`${row.original.faceSubId}`}</>
+                        <>
+                            <>
+                                <canvas id={`officer-${row.id}`} width="64" height="80" ></canvas>
+                            </>
+                            <>
+                                sub 1 : {`${row.original.faceMainId}/${row.original.faceSubId}`}
+                            </>
+
+                        </>
                     );
                 } else {
                     const idx = row.original.faceMainId;
@@ -546,7 +572,10 @@ export default (props) => {
                     for (let i=0; i<faceData.length; i++) {
                         imgData.data[i] = faceData[i];
                     }
-                    ctx.putImageData(imgData, 0, 0);
+                    // ctx.putImageData(imgData, 0, 0);
+
+
+
                     // const resizeImgData = resizeImageData(imgData, 64, 80);
                     // ctx.drawImage()
                     // ctx.scale(1.0, 2.0);
@@ -558,8 +587,36 @@ export default (props) => {
         }
 
         return (
+            <>
+                <>
             <canvas id={`officer-${row.id}`} width="64" height="80" ></canvas>
+                </>
+                
+            {
+                row.original.faceSubId!==0 &&
+                <>
+                    sub 2 : {row.original.faceMainId}/{row.original.faceSubId}
+                </>
+            }
+            {
+                row.original.faceSubId===0 &&
+                <>
+                    main : {row.original.faceMainId}/{row.original.faceSubId}
+                </>
+            }
+            {/* <canvas id={`officer-${row.id}`} width="64" height="80" ></canvas> */}
+            </>
+            
         );
+    }
+
+    const loadName = (data) => {
+        if (data.row.original.lordNum===0) {
+            return <>무소속</>
+        } else {
+            const lord = drawOfficers.filter(officer=>officer.idx===data.row.original.lordNum);
+            return <>{lord[0]&&lord[0].name}</>
+        }
     }
 
     const columns = useMemo(
@@ -657,6 +714,31 @@ export default (props) => {
                 Header: T('Birth'),
                 accessor: 'birth',
                 // Cell: (data) => UsersCellPlainText({cellData: data}),
+            },
+            {
+                Header: T('Lord Name'),
+                // accessor: 'lordNum',
+                Cell: (data) => loadName(data),
+            },
+            {
+                Header: T('Lord'),
+                accessor: 'lordNum',
+            },
+            {
+                Header: T('Ex2'),
+                accessor: 'unknown2',
+            },
+            {
+                Header: T('Famliy'),
+                accessor: 'family',
+            },
+            {
+                Header: T('Ex5'),
+                accessor: 'unknown5',
+            },
+            {
+                Header: T('Ex6'),
+                accessor: 'unknown6',
             },
         ],
         [officers]
