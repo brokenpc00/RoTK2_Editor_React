@@ -82,7 +82,7 @@ const parsePersonalData = (data, isKor=true) => {
     const amb = data[pos++];
     //모름
     tmp = data[pos++]+1;
-    const lordNum = tmp===256?0:tmp;
+    const lordNum = tmp===256?0:tmp===16?255:tmp;
     // pos++;
     //충성
     const loyalty = data[pos++];
@@ -933,9 +933,9 @@ export default (props) => {
                             <>
                                 <canvas id={`officer-${row.id}`} width={`${width}`} height={`${height*2}`} ></canvas>
                             </>
-                            <>
+                            {/* <>
                                 sub 1 : {`${row.original.faceMainId}/${row.original.faceSubId}`}
-                            </>
+                            </> */}
 
                         </>
                     );
@@ -967,7 +967,7 @@ export default (props) => {
             <canvas id={`officer-${row.id}`} width="64" height="80" ></canvas>
                 </>
                 
-            {
+            {/* {
                 row.original.faceSubId!==0 &&
                 <>
                     sub 2 : {row.original.faceMainId}/{row.original.faceSubId}
@@ -978,7 +978,7 @@ export default (props) => {
                 <>
                     main : {row.original.faceMainId}/{row.original.faceSubId}
                 </>
-            }
+            } */}
             {/* <canvas id={`officer-${row.id}`} width="64" height="80" ></canvas> */}
             </>
             
@@ -986,12 +986,9 @@ export default (props) => {
     }
 
     const loadName = (data) => {
-        if (data.row.original.lordNum===0) {
-            return <>무소속</>
-        } else {
-            const lord = drawOfficers.filter(officer=>officer.idx===data.row.original.lordNum);
-            return <>{lord[0]&&lord[0].name}</>
-        }
+        const lord = drawOfficers.filter(officer=>officer.idx===data.row.original.lordNum);
+        const name = lord[0]&&lord[0].name || '무소속'
+        return <>{name}</>
     }
 
     const columns = useMemo(
