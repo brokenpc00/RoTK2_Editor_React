@@ -91,7 +91,7 @@ const parsePersonalData = (data, isKor=true) => {
     //침투... 안했으면 0xff
     const hide = data[pos++];
     //모름... 침투 하면 값이 변경되긴 함.
-    const unknown2 = data[pos++];
+    const unknown1 = data[pos++];
     // pos++;
     //상성
     const syn = data[pos++];
@@ -105,10 +105,10 @@ const parsePersonalData = (data, isKor=true) => {
     //훈련
     const train = data[pos++];
     //모름
-    const unknown5 = data[pos++];
+    const unknown2 = data[pos++];
     // pos++;
     //모름
-    const unknown6 = data[pos++];
+    const unknown3 = data[pos++];
     // pos++;
     //생년
     const birth = data[pos++];
@@ -128,37 +128,42 @@ const parsePersonalData = (data, isKor=true) => {
         name = new TextDecoder().decode(data.slice(pos, pos+17));
         pos += 17;
     }
+
+    const unknown4 = data[pos++]
+    const unknown5 = data[pos++]
     // name = '';
 
 
     return {
-        nextOfficerLower,
-        nextOfficerUpper,
-        action,
-        health,
-        int,
-        war,
-        chm,
-        trust,
-        good,
-        amb,
-        loyalty,
-        hide,
-        off,
-        syn,
-        army,
-        weapon,
-        train,
-        birth,
-        faceMainId,
-        faceSubId,
-        fullFace,
-        name,
-        lordNum,
-        unknown2,
-        family,
-        unknown5,
-        unknown6,
+        nextOfficerLower,       // 1
+        nextOfficerUpper,       // 1 2
+        action,                 // 1 3
+        health,                 // 1 4
+        int,                    // 1 5
+        war,                    // 1 6
+        chm,                    // 1 7
+        trust,                  // 1 8
+        good,                   // 1 9
+        amb,                    // 1 10
+        lordNum,                // 1 11
+        loyalty,                // 1 12
+        off,                    // 1 13
+        hide,                   // 1 14
+        unknown1,               // 1 15
+        syn,                    // 1 16
+        family,                 // 2 18
+        army,                   // 2 20
+        weapon,                 // 2 22
+        train,                  // 1 23
+        unknown2,               // 1 24
+        unknown3,               // 1 25
+        birth,                  // 1 26
+        faceMainId,             // 1 27
+        faceSubId,              // 1 28
+        name,                   // isKor ? 6(34) : 17(45)
+        unknown4,               // 1 isKor ? 35 : 46
+        unknown5,               // 1 isKor ? 36 : 47
+        fullFace,               // total isKor ? 36 : 47
     }
 };
 
@@ -270,6 +275,8 @@ export default (props) => {
 
     const [fileLoadComplete, setFileLoadComplete] = useState(false);
 
+    const [fileName, setFileName] = useState('')
+
     const [faceLoadComplete, setFaceLoadComplete] = useState(false);
     const [faceRawData, setFaceRawData] = useState([]);
 
@@ -341,7 +348,7 @@ export default (props) => {
             });            
         } else {
             // let faceData = faceRawData.slice();
-            // return;
+            return;
             var canvas = document.getElementById('allOfficer');
             var ctx = canvas.getContext('2d');
             let posX = 0;
@@ -399,7 +406,6 @@ export default (props) => {
         }
     }, [montageLoadComplete])
 
-
     useEffect(()=>{
         if (saveData && saveData.length>20) {
             const data = saveData.slice();
@@ -427,8 +433,9 @@ export default (props) => {
                     start = offset;
                     length = 36;
                     offset = start + length;
-                    const officer = parsePersonalData(data.slice(start, offset));
-                    officerArray.push(officer);
+                    const officerData = data.slice(start, offset)
+                    const officer = parsePersonalData(officerData);
+                    officerArray.push(officerData);
                     totalSum += length;
 
                     if ((officer.action===0 || officer.action===1) && (officer.health===0 || officer.health===1) && officer.faceMainId>0) {
@@ -462,8 +469,9 @@ export default (props) => {
                     start = offset;
                     length = 35;
                     offset = start + length;
-                    const landInfo = parseCountryData(data.slice(start, offset));
-                    landArray.push(landInfo);
+                    const landData = data.slice(start, offset)
+                    const landInfo = parseCountryData(landData);
+                    landArray.push(landData);
                     totalSum += length;
 
                     // console.log(`]]]]] Country: No:${i+1} >>> ${JSON.stringify(landInfo)}`);
@@ -911,6 +919,8 @@ export default (props) => {
 
     const FaceImageFromIndex = (data) => {
 
+        return <></>
+
         var row = data.row;
 
         var canvas = document.getElementById(`officer-${row.id}`);
@@ -1157,11 +1167,7 @@ export default (props) => {
 
     useEffect(()=>{
 
-        if (fileLoadComplete) {
-
-
-
-        } else {
+        return () => {
             setHeader([]);
             setOfficers([]);
             setDummy1([]);
@@ -1196,6 +1202,7 @@ export default (props) => {
                                 
                                 var file = document.querySelector("#file").files[0]; 
                                 var fileData = new Blob([file]);
+                                setFileName(file.name)
                                 
                                 var reader = new FileReader(); 
                                 reader.readAsArrayBuffer(fileData);
@@ -1220,7 +1227,70 @@ export default (props) => {
                         },
                         {
                             label : 'Save File',
-                            onClick: ()=>{}
+                            onClick: ()=>{
+
+                                /*
+                                data : {
+                                    headerArray(32): {
+                                        signature(0~10),
+                                        ...
+                                    },
+                                    officerArray(36*255)[
+                                        officer(36): {
+
+                                        }
+                                    ],
+                                    unknown1(662),
+                                    landArray(35*41)[]: {
+                                        landInfo(35): {
+
+                                        }
+                                    },
+                                    unknown2(rest)
+                                }
+                                header.length + officers.length + dummy1.length + lands.length + dummy2.length = saveData.length
+                                */
+
+                                const bytes = new Uint8Array(saveData.length);
+                                let offset = 0
+                                bytes.set(header)
+                                offset += header.length
+                                officers.forEach(e=>{
+                                    bytes.set(e, offset)
+                                    offset += e.length
+                                })
+                                bytes.set(dummy1, offset)
+                                offset += dummy1.length
+                                lands.forEach(e=>{
+                                    bytes.set(e, offset)
+                                    offset += e.length
+                                })
+                                bytes.set(dummy2, offset)
+                                // const len = bytes.byteLength;
+                                // const newData = new Uint8Array(saveData);
+
+                                const downloadURL = function(data, fileName) {
+                                    var a;
+                                    a = document.createElement('a');
+                                    a.href = data;
+                                    a.download = fileName;
+                                    document.body.appendChild(a);
+                                    a.style = 'display: none';
+                                    a.click();
+                                    a.remove();
+                                };
+
+                                const blob = new Blob([bytes], {
+                                    type: 'application/octet-stream'
+                                  })
+                                const url = window.URL.createObjectURL(blob)
+                                downloadURL(url, `${fileName}_save`)
+                                setTimeout(()=>{
+                                    return window.URL.revokeObjectURL(url)
+                                }, 1000)
+
+                                console.log(`]]]]] ${header.length} + ${officers.length*36} + ${dummy1.length} + ${lands.length*35} + ${dummy2.length} (${header.length+officers.length*36+dummy1.length+lands.length*35+dummy2.length}) = ${saveData.length}`)
+                            }
                         }
                     ]}
                 />]}
