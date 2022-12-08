@@ -1041,7 +1041,7 @@ export default (props) => {
             } else {                
                 return <a onClick={e=>{
                     e.preventDefault();
-                    const el = document.getElementById(`anchor${ruler.idx}`)
+                    const el = document.getElementById(`officer${ruler.idx}`)
                     el.scrollIntoView({ behavior: 'smooth', block: 'start' })
                 }}>{ruler.name.value}</a>
             }
@@ -1066,8 +1066,8 @@ export default (props) => {
                 Header: 'No',
                 // accessor: 'idx',
                 Cell: (data) => {
-                    return <div id={`title-element${data.row.original.idx}`} style={{position: 'relative'}}>
-                        <div id={`anchor${data.row.original.idx}`} style={{position: 'absolute', top: '-100px', left: '0px'}}>
+                    return <div id={`officer-element${data.row.original.idx}`} style={{position: 'relative'}}>
+                        <div id={`officer${data.row.original.idx}`} style={{position: 'absolute', top: '-100px', left: '0px'}}>
                         </div>
                         <div >{data.row.original.idx}</div>
                     </div>
@@ -1076,7 +1076,17 @@ export default (props) => {
             {
                 Header: T('Name'),
                 // accessor: 'name.value',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'name'}),
+                // Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'name'}),
+                Cell: (data) => {
+                    const cellData = data.row.original
+                    return <a onClick={e=>{
+                        e.preventDefault();
+                        const el = document.getElementById(`next${cellData.idx}`)
+                        if (el) {
+                            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        }
+                    }}>{cellData.name.value}</a> 
+                }
             },
             {
                 Header: T('Old'),
@@ -1184,11 +1194,17 @@ export default (props) => {
 
                     const nextOfficer = linkOfficer(data, 'nextOfficer')
                     if (nextOfficer) {
-                        return <a onClick={e=>{
-                            e.preventDefault();
-                            const el = document.getElementById(`anchor${nextOfficer.idx}`)
-                            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-                        }}>{nextOfficer.name.value}</a>
+                        return <div id={`next-element${nextOfficer.idx}`} style={{position: 'relative'}}>
+                            <div id={`next${nextOfficer.idx}`} style={{position: 'absolute', top: '-100px', left: '0px'}}>
+                            </div>
+                            <div >
+                                <a onClick={e=>{
+                                    e.preventDefault();
+                                    const el = document.getElementById(`officer${nextOfficer.idx}`)
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                                }}>{nextOfficer.name.value}</a>                                
+                            </div>
+                        </div>
                     }
 
                     return <>{'-'}</>
@@ -1198,7 +1214,7 @@ export default (props) => {
                     //     if (nextOfficer) {
                     //         return <a onClick={e=>{
                     //             e.preventDefault();
-                    //             const el = document.getElementById(`anchor${nextOfficer.idx}`)
+                    //             const el = document.getElementById(`officer${nextOfficer.idx}`)
                     //             el.scrollIntoView({ behavior: 'smooth', block: 'start' })
                     //         }}>{nextOfficer.name.value}</a>
                     //     } else {
@@ -1207,7 +1223,7 @@ export default (props) => {
                     //         } else {
                     //             return <a onClick={e=>{
                     //                 e.preventDefault();
-                    //                 const el = document.getElementById(`anchor${ruler.idx}`)
+                    //                 const el = document.getElementById(`officer${ruler.idx}`)
                     //                 el.scrollIntoView({ behavior: 'smooth', block: 'start' })
                     //             }}>{`처음(${ruler.name.value})`}</a>        
                     //         }
