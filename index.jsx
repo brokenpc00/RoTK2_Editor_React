@@ -34,7 +34,8 @@ const useStyles = makeStyles((theme)=>
 );
 
 function getBaseLog(x, y) {
-    return Math.log(y) / Math.log(x);
+    const logValue = Math.log(y) / Math.log(x)
+    return logValue
 }
 
 const setVal = (index, pos, size, value) => {
@@ -90,8 +91,8 @@ const parsePersonalData = (index, data, isKor=true) => {
     const amb = setVal(index, pos, 1, data[pos++]);
     //모름
     tmp = data[pos++];
-    // tmp 255: 무소속(0), tmp 15: 신군주(255)
-    const rulerNum = setVal(index, pos, 1, (tmp===255?0:tmp===15?255:tmp+1));
+    // tmp : 15 > 신군주... 254로 변경해줌. 255는 무소속
+    const rulerNum = setVal(index, pos, 1, tmp===15?254:tmp);
 
     const tmp1 = tmp
 
@@ -182,13 +183,9 @@ const parsePersonalData = (index, data, isKor=true) => {
         fullFace,               // total isKor ? 36 : 47
     }
 
-    // if (rulerNum.value===255) {
-    //     const address = nextOfficerLower.value | nextOfficerUpper.value << 8
-    //     // const
-    //     const prevSize = 88
-    //     const offset = (address - prevSize)/36 + 1
-    //     console.log(`]]]]] 유비파!! idx: ${index+1}, name : ${name.value}, link : ${address}, low : ${nextOfficerLower.value}, high: ${nextOfficerUpper.value}`)
-    // }
+    if (rulerNum.value===254) {
+        // console.log(`]]]]] 신군주파!! idx: ${index+1}, name : ${name.value}, link : ${offsetIdx}, low : ${nextOfficerLower.value}, high: ${nextOfficerUpper.value}`)
+    }
 
 
     return officer
@@ -320,7 +317,7 @@ export default (props) => {
 
     useEffect(()=>{
         if (faceRawData.length>0) {
-            console.log(`]]]]] load complete face data : ${faceRawData.length} === (210,240)`);
+            // console.log(`]]]]] load complete face data : ${faceRawData.length} === (210,240)`);
         }
     }, [faceRawData]);
 
@@ -1037,7 +1034,7 @@ export default (props) => {
     }
 
     const loadName = (data) => {
-        const ruler = linkOfficer(data, 'rulerNum')
+        const ruler = drawOfficers.find(o=>o.idx===data.row.original.rulerNum.value+1)
         if (ruler) {
             if (ruler.idx===data.row.original.idx) {
                 return <>{'군주'}</>
@@ -1053,8 +1050,12 @@ export default (props) => {
     
     const renderCell = ({rowData, field}) => {
         const cellData = rowData[field]
+        
         if (cellData) {
-            // console.log(`]]]]] ${field} cell data : ${JSON.stringify(cellData)}`)
+            const pos = cellData.pos
+            const offset = cellData.index
+            // console.log(`]]]]] [${offset}][${pos}] ${field} : ${cellData.value}`)
+                // console.log(`]]]]] ${field} cell data : ${JSON.stringify(cellData)}`)
             return cellData.value    
         } else return ''
     }
@@ -1333,7 +1334,7 @@ export default (props) => {
                             const bytes = new Uint8Array(event.target.result);
                             const len = bytes.byteLength;
     
-                            console.log(`]]]]] file length : ${len}`);
+                            // console.log(`]]]]] file length : ${len}`);
     
                             setOfficers([]);
                             setDrawOfficers([]);
@@ -1421,7 +1422,7 @@ export default (props) => {
                                     return window.URL.revokeObjectURL(url)
                                 }, 1000)
 
-                                console.log(`]]]]] ${header.length} + ${officers.length*36} + ${dummy1.length} + ${lands.length*35} + ${dummy2.length} (${header.length+officers.length*36+dummy1.length+lands.length*35+dummy2.length}) = ${saveData.length}`)
+                                // console.log(`]]]]] ${header.length} + ${officers.length*36} + ${dummy1.length} + ${lands.length*35} + ${dummy2.length} (${header.length+officers.length*36+dummy1.length+lands.length*35+dummy2.length}) = ${saveData.length}`)
                             }
                         }
                     ]}
