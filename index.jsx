@@ -35,14 +35,22 @@ const useStyles = makeStyles((theme)=>
 
 function getBaseLog(x, y) {
     return Math.log(y) / Math.log(x);
-  }
+}
 
-const parsePersonalData = (data, isKor=true) => {
+const setVal = (index, pos, size, value) => {
+    return { index, pos, size, value }
+}
+
+const idxFromOffset = (offset) => {
+    return offset>0?((offset - 88)/36 + 1):0
+}
+
+const parsePersonalData = (index, data, isKor=true) => {
     let pos = 0;
     // next officer address lower
-    const nextOfficerLower = data[pos++];
+    const nextOfficerLower = setVal(index, pos, 1, data[pos++]);
     // next officer address upper
-    const nextOfficerUpper = data[pos++];
+    const nextOfficerUpper = setVal(index, pos, 1, data[pos++]);
     //행동 
     /*
         0x01 : Done / Not Done
@@ -54,7 +62,7 @@ const parsePersonalData = (data, isKor=true) => {
         0x40 : unknown
         0x80 : unknown
     */
-    const action = data[pos++];
+    const action = setVal(index, pos, 1, data[pos++]);
     //건강
     /*
         0x01 : 부상당함 (전투에서 회복하려면 3개월 걸린다.)
@@ -67,76 +75,84 @@ const parsePersonalData = (data, isKor=true) => {
         0x80 : 아이템 받은 상태 (일시적으로 충성도 하락에 면역)
     */
    let tmp = 0;
-    const health = data[pos++]; // 80이면 아이템 가진상태...
+    const health = setVal(index, pos, 1, data[pos++]); // 80이면 아이템 가진상태...
     //지력
-    const int = data[pos++];
+    const int = setVal(index, pos, 1, data[pos++]);
     //무력
-    const war = data[pos++];
+    const war = setVal(index, pos, 1, data[pos++]);
     //매력
-    const chm = data[pos++];
+    const chm = setVal(index, pos, 1, data[pos++]);
     //인덕
-    const trust = data[pos++];
+    const trust = setVal(index, pos, 1, data[pos++]);
     //의리
-    const good = data[pos++];
+    const good = setVal(index, pos, 1, data[pos++]);
     //야망
-    const amb = data[pos++];
+    const amb = setVal(index, pos, 1, data[pos++]);
     //모름
-    tmp = data[pos++]+1;
-    const lordNum = tmp===256?0:tmp===16?255:tmp;
+    tmp = data[pos++];
+    // tmp 255: 무소속(0), tmp 15: 신군주(255)
+    const rulerNum = setVal(index, pos, 1, (tmp===255?0:tmp===15?255:tmp+1));
+
+    const tmp1 = tmp
+
     // pos++;
     //충성
-    const loyalty = data[pos++];
+    const loyalty = setVal(index, pos, 1, data[pos++]);
     //사관
-    const off = data[pos++];
+    const off = setVal(index, pos, 1, data[pos++]);
     //침투... 안했으면 0xff
-    const hide = data[pos++];
+    const hide = setVal(index, pos, 1, data[pos++]);
     //모름... 침투 하면 값이 변경되긴 함.
-    const unknown1 = data[pos++];
+    const unknown1 = setVal(index, pos, 1, data[pos++]);
     // pos++;
     //상성
-    const syn = data[pos++];
+    const syn = setVal(index, pos, 1, data[pos++]);
     //모름
     tmp = (data[pos++] | data[pos++] << 8)
-    const family = tmp===0?tmp:getBaseLog(2, tmp)+1;
+    const family = setVal(index, pos, 2, (tmp===0?tmp:getBaseLog(2, tmp)+1));
     //병사
-    const army = data[pos++] | data[pos++] << 8;
+    const army = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8));
     //무장
-    const weapon = data[pos++] | data[pos++] << 8;
+    const weapon = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8));
     //훈련
-    const train = data[pos++];
+    const train = setVal(index, pos, 1, data[pos++]);
     //모름
-    const unknown2 = data[pos++];
+    const unknown2 = setVal(index, pos, 1, data[pos++]);
     // pos++;
     //모름
-    const unknown3 = data[pos++];
+    const unknown3 = setVal(index, pos, 1, data[pos++]);
     // pos++;
     //생년
-    const birth = data[pos++];
+    const born = setVal(index, pos, 1, data[pos++]);
     //얼굴
-    const faceMainId = data[pos++];
+    const faceMainId = setVal(index, pos, 1, data[pos++]);
     //모름
-    const faceSubId = data[pos++];
+    const faceSubId = setVal(index, pos, 1, data[pos++]);
 
-    const fullFace = faceMainId | faceSubId << 8 
+    const fullFace = setVal(index, pos-2, 2, (faceMainId.value | faceSubId.value << 8))
 
     //이름
     let name = '';
     if (isKor) {
-        name = new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6));
+        name = setVal(index, pos, 6, (new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6))));
         pos += 6;
     } else {
-        name = new TextDecoder().decode(data.slice(pos, pos+17));
+        name = setVal(index, pos, 17, (new TextDecoder().decode(data.slice(pos, pos+17))));
         pos += 17;
     }
 
-    const unknown4 = data[pos++]
-    const unknown5 = data[pos++]
+    const unknown4 = setVal(index, pos, 1, data[pos++])
+    const unknown5 = setVal(index, pos, 1, data[pos++])
     // name = '';
 
+    const offsetIdx = idxFromOffset(nextOfficerLower.value | nextOfficerUpper.value << 8)
 
-    return {
+    let nextOfficer = setVal(index, 0, 2, offsetIdx)    
+
+    const officer = {
         nextOfficerLower,       // 1
         nextOfficerUpper,       // 1 2
+        nextOfficer,            // 
         action,                 // 1 3
         health,                 // 1 4
         int,                    // 1 5
@@ -145,7 +161,7 @@ const parsePersonalData = (data, isKor=true) => {
         trust,                  // 1 8
         good,                   // 1 9
         amb,                    // 1 10
-        lordNum,                // 1 11
+        rulerNum,               // 1 11
         loyalty,                // 1 12
         off,                    // 1 13
         hide,                   // 1 14
@@ -157,7 +173,7 @@ const parsePersonalData = (data, isKor=true) => {
         train,                  // 1 23
         unknown2,               // 1 24
         unknown3,               // 1 25
-        birth,                  // 1 26
+        born,                  // 1 26
         faceMainId,             // 1 27
         faceSubId,              // 1 28
         name,                   // isKor ? 6(34) : 17(45)
@@ -165,6 +181,17 @@ const parsePersonalData = (data, isKor=true) => {
         unknown5,               // 1 isKor ? 36 : 47
         fullFace,               // total isKor ? 36 : 47
     }
+
+    // if (rulerNum.value===255) {
+    //     const address = nextOfficerLower.value | nextOfficerUpper.value << 8
+    //     // const
+    //     const prevSize = 88
+    //     const offset = (address - prevSize)/36 + 1
+    //     console.log(`]]]]] 유비파!! idx: ${index+1}, name : ${name.value}, link : ${address}, low : ${nextOfficerLower.value}, high: ${nextOfficerUpper.value}`)
+    // }
+
+
+    return officer
 };
 
 const parseCountryData = (data, isKor=true) => {
@@ -285,7 +312,10 @@ export default (props) => {
 
     const [drawAllFace, setDrawAllFace] = useState(false);
 
-    const [,forceRender] = useState({})
+    const [needRefresh, forceRender] = useState({})
+
+    const [currentYear, setCurrentYear] = useState(0)
+    const [currentMonth, setCurrentMonth] = useState(0)
 
 
     useEffect(()=>{
@@ -335,7 +365,7 @@ export default (props) => {
 
     useEffect(()=>{
         if (!faceLoadComplete) {
-            fetch('http://localhost/kaodata').then(r => {
+            fetch('http://dev.site/speech-dashboard/kaodata').then(r => {
 
                 const reader = r.body.getReader();
 
@@ -373,7 +403,7 @@ export default (props) => {
 
     useEffect(()=>{
         if (!montageLoadComplete) {
-            fetch('http://localhost/montage').then(r=>{
+            fetch('http://dev.site/speech-dashboard/montage').then(r=>{
                 const reader = r.body.getReader();
                 
                 reader.read().then(({done, value})=>{
@@ -424,8 +454,11 @@ export default (props) => {
                 setHeader(headerArray);
                 totalSum += length;
 
+                setCurrentYear(headerArray[12])
+                setCurrentMonth(headerArray[14]+1)
+
                 const headerSize = offset;
-                console.log(`]]]]] headerSize : ${headerSize} === ${headerArray.length})`);
+                // console.log(`]]]]] headerSize : ${headerSize} === ${headerArray.length})`);
 
                 const officerArray = [];
                 const drawOfficeArray = [];
@@ -434,11 +467,11 @@ export default (props) => {
                     length = 36;
                     offset = start + length;
                     const officerData = data.slice(start, offset)
-                    const officer = parsePersonalData(officerData);
+                    const officer = parsePersonalData(i, officerData);
                     officerArray.push(officerData);
                     totalSum += length;
 
-                    if ((officer.action===0 || officer.action===1) && (officer.health===0 || officer.health===1) && officer.faceMainId>0) {
+                    if ((officer.action.value===0 || officer.action.value===1) && (officer.health.value===0 || officer.health.value===1) && officer.faceMainId.value>0) {
                         // console.log(`]]]]] Person No: ${i+1} >>> ${JSON.stringify(officer)}`);
                         const drawOff = {
                             idx:i+1,
@@ -451,7 +484,7 @@ export default (props) => {
                 setDrawOfficers(drawOfficeArray);
                 
                 const officerSize = offset-headerSize;
-                console.log(`]]]]] offierSize : ${officerSize} === ${officerArray.length}x36(${officerArray.length*36})`);
+                // console.log(`]]]]] offierSize : ${officerSize} === ${officerArray.length}x36(${officerArray.length*36})`);
 
 
                 start = offset;
@@ -462,7 +495,7 @@ export default (props) => {
                 totalSum += length;
 
                 const dummy1Size = offset-headerSize-officerSize;
-                console.log(`]]]]] dummy1Size : ${dummy1Size} === ${unKnownDummy1.length}(668)`);
+                // console.log(`]]]]] dummy1Size : ${dummy1Size} === ${unKnownDummy1.length}(668)`);
 
                 const landArray = [];
                 for (let i=0; i<41; i++) {
@@ -479,7 +512,7 @@ export default (props) => {
                 setLands(landArray);
 
                 const landSize = offset-headerSize-officerSize-dummy1Size;
-                console.log(`]]]]] landSize : ${landSize} === ${landArray.length}x35(${landArray.length*35})`);
+                // console.log(`]]]]] landSize : ${landSize} === ${landArray.length}x35(${landArray.length*35})`);
 
 
                 start = offset;
@@ -490,9 +523,9 @@ export default (props) => {
                 totalSum += length;
 
                 const dummy2Size = offset-headerSize-officerSize-dummy1Size-landSize;
-                console.log(`]]]]] dummy2Size : ${dummy2Size} === ${unKnownDummy2.length}`);
+                // console.log(`]]]]] dummy2Size : ${dummy2Size} === ${unKnownDummy2.length}`);
 
-                console.log(`]]]]] totalSize (${data.length}) === sum(${headerSize+officerSize+dummy1Size+landSize+dummy2Size}) === ${totalSum}`);
+                // console.log(`]]]]] totalSize (${data.length}) === sum(${headerSize+officerSize+dummy1Size+landSize+dummy2Size}) === ${totalSum}`);
                 setIsLoadComplete(true);
             } else {
                 console.log(`]]]]] invalid file`);
@@ -589,7 +622,7 @@ export default (props) => {
         const {idx, name, fullFace} = data
 
         // 8 가지 sets의 pointer (50688 / 8 = 6336 bytes)
-        const group = fullFace&0x07
+        const group = fullFace.value&0x07
         let setLength = 6336;
 
         let start = group*setLength;
@@ -601,12 +634,12 @@ export default (props) => {
 
         // 6336 bytes = 50688 bits
         // 50688 bits = 1set에 16896 pixels 을 표현가능
-        const upperType = (fullFace>>3)&0x03
-        const lowerType = (fullFace>>5)&0x03
-        const eyeType = (fullFace>>7)&0x03
-        const noseType = (fullFace>>9)&0x03
-        const mouthType = (fullFace>>11)&0x03
-        const faceType = (fullFace>>13)&0x07
+        const upperType = (fullFace.value>>3)&0x03
+        const lowerType = (fullFace.value>>5)&0x03
+        const eyeType = (fullFace.value>>7)&0x03
+        const noseType = (fullFace.value>>9)&0x03
+        const mouthType = (fullFace.value>>11)&0x03
+        const faceType = (fullFace.value>>13)&0x07
 
         // console.log(`]]]]] ${name}[${faceType}] > Offset : ${offset}, UpperType : ${upperType}, LowerType : ${lowerType}, EyeType : ${eyeType}, NoseType : ${noseType}, MouthType : ${mouthType}`)
 
@@ -917,9 +950,9 @@ export default (props) => {
     }
 
 
-    const FaceImageFromIndex = (data) => {
+    const renderOfficeFace = (data) => {
 
-        return <></>
+        // return <></>
 
         var row = data.row;
 
@@ -928,7 +961,7 @@ export default (props) => {
             var ctx = canvas.getContext('2d');
             if (faceRawData.length>0) {
 
-                if (row.original.faceSubId>=0x01 && row.original.faceSubId<=0xff) {
+                if (row.original.faceSubId.value>=0x01 && row.original.faceSubId.value<=0xff) {
                     const width = 64
                     const height = 40
                     const faceData = getGenericFaceData(width, height, row.original)
@@ -944,13 +977,13 @@ export default (props) => {
                                 <canvas id={`officer-${row.id}`} width={`${width}`} height={`${height*2}`} ></canvas>
                             </>
                             {/* <>
-                                sub 1 : {`${row.original.faceMainId}/${row.original.faceSubId}`}
+                                sub 1 : {`${row.original.faceMainId.value}/${row.original.faceSubId.value}`}
                             </> */}
 
                         </>
                     );
                 } else {
-                    const idx = row.original.faceMainId;
+                    const idx = row.original.faceMainId.value;
                     const faceData = getFaceData(idx); // 2560 elements
                     var imgData = ctx.createImageData(64, 80); // imgData.data 10240 elements
     
@@ -978,15 +1011,15 @@ export default (props) => {
                 </>
                 
             {/* {
-                row.original.faceSubId!==0 &&
+                row.original.faceSubId.value!==0 &&
                 <>
-                    sub 2 : {row.original.faceMainId}/{row.original.faceSubId}
+                    sub 2 : {row.original.faceMainId.value}/{row.original.faceSubId.value}
                 </>
             }
             {
-                row.original.faceSubId===0 &&
+                row.original.faceSubId.value===0 &&
                 <>
-                    main : {row.original.faceMainId}/{row.original.faceSubId}
+                    main : {row.original.faceMainId.value}/{row.original.faceSubId.value}
                 </>
             } */}
             {/* <canvas id={`officer-${row.id}`} width="64" height="80" ></canvas> */}
@@ -995,133 +1028,230 @@ export default (props) => {
         );
     }
 
+    const linkOfficer = (data, field) => {
+        const officer = drawOfficers.find(o=>o.idx===data.row.original[field].value)
+        if (officer) {
+            // console.log(`]]]]] find officer = ${officer.name.value}`)
+        }
+        return officer
+    }
+
     const loadName = (data) => {
-        const lord = drawOfficers.filter(officer=>officer.idx===data.row.original.lordNum);
-        const name = lord[0]&&lord[0].name || '무소속'
-        return <>{name}</>
+        const ruler = linkOfficer(data, 'rulerNum')
+        if (ruler) {
+            if (ruler.idx===data.row.original.idx) {
+                return <>{'군주'}</>
+            } else {                
+                return <a onClick={e=>{
+                    e.preventDefault();
+                    const el = document.getElementById(`anchor${ruler.idx}`)
+                    el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                }}>{ruler.name.value}</a>
+            }
+        } else return <>{'무소속'}</>
+    }
+    
+    const renderCell = ({rowData, field}) => {
+        const cellData = rowData[field]
+        if (cellData) {
+            // console.log(`]]]]] ${field} cell data : ${JSON.stringify(cellData)}`)
+            return cellData.value    
+        } else return ''
     }
 
     const columns = useMemo(
         () => [
             {
                 Header: 'No',
-                accessor: 'idx',
+                // accessor: 'idx',
+                Cell: (data) => {
+                    return <div id={`title-element${data.row.original.idx}`} style={{position: 'relative'}}>
+                        <div id={`anchor${data.row.original.idx}`} style={{position: 'absolute', top: '-100px', left: '0px'}}>
+                        </div>
+                        <div >{data.row.original.idx}</div>
+                    </div>
+                },
             },
             {
                 Header: T('Name'),
-                accessor: 'name',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'name.value',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'name'}),
             },
             {
+                Header: T('Old'),
+                // accessor: 'born',
+                Cell: (data) => {
+                    const cellData = data.row.original
+                    const old = currentYear - cellData.born.value + 1
+                    return <>{old}</>
+                },
+            },
+            // {
+            //     Header: T('Face'),
+            //     accessor: 'face',
+            //     Cell: (data) => renderOfficeFace(data),
+            // },
+            {
                 Header: T('Action'),
-                accessor: 'action',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'action.value',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'action'}),
             },
             {
                 Header: T('Health'),
-                accessor: 'health',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
-            },
-            {
-                Header: T('Face'),
-                accessor: 'face',
-                Cell: (data) => FaceImageFromIndex(data),
+                // accessor: 'health.value',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'health'}),
             },
             {
                 Header: T('FaceId'),
-                accessor: 'faceMainId',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'faceMainId',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'faceMainId'}),
             },
             {
                 Header: T('INT'),
-                accessor: 'int',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'int',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'int'}),
             },
             {
                 Header: T('WAR'),
-                accessor: 'war',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'war',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'war'}),
             },
             {
                 Header: T('Charm'),
-                accessor: 'chm',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'chm',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'chm'}),
             },
             {
                 Header: T('Trust'),
-                accessor: 'trust',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'trust',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'trust'}),
             },
             {
                 Header: T('Good'),
-                accessor: 'good',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'good',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'good'}),
             },
             {
                 Header: T('Ambitious'),
-                accessor: 'amb',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'amb',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'amb'}),
             },
             {
                 Header: T('Loyalty'),
-                accessor: 'loyalty',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'loyalty',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'loyalty'}),
             },
             {
                 Header: T('Office'),
-                accessor: 'off',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'off',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'off'}),
             },
             {
                 Header: T('Sync'),
-                accessor: 'syn',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'syn',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'syn'}),
             },
             {
                 Header: T('Army'),
-                accessor: 'army',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'army',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'army'}),
             },
             {
                 Header: T('Weapon'),
-                accessor: 'weapon',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'weapon',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'weapon'}),
             },
             {
                 Header: T('Training'),
-                accessor: 'train',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
+                // accessor: 'train',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'train'}),
             },
+            // {
+            //     Header: T('Born'),
+            //     // accessor: 'born',
+            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'born'}),
+            // },
             {
-                Header: T('Birth'),
-                accessor: 'birth',
-                // Cell: (data) => UsersCellPlainText({cellData: data}),
-            },
-            {
-                Header: T('Lord Name'),
-                // accessor: 'lordNum',
+                Header: T('Ruler Name'),
+                // accessor: 'rulerNum',
                 Cell: (data) => loadName(data),
             },
             {
-                Header: T('Lord'),
-                accessor: 'lordNum',
-            },
-            {
-                Header: T('Ex2'),
-                accessor: 'unknown2',
-            },
+                Header: T('다음'),
+                // accessor: 'name.value',
+                Cell: (data) => {
+
+                    const nextOfficer = linkOfficer(data, 'nextOfficer')
+                    if (nextOfficer) {
+                        return <a onClick={e=>{
+                            e.preventDefault();
+                            const el = document.getElementById(`anchor${nextOfficer.idx}`)
+                            el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                        }}>{nextOfficer.name.value}</a>
+                    }
+
+                    return <>{'-'}</>
+                    // const ruler = linkOfficer(data, 'rulerNum')
+                    // if (ruler) {
+                    //     const nextOfficer = linkOfficer(data, 'nextOfficer')
+                    //     if (nextOfficer) {
+                    //         return <a onClick={e=>{
+                    //             e.preventDefault();
+                    //             const el = document.getElementById(`anchor${nextOfficer.idx}`)
+                    //             el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    //         }}>{nextOfficer.name.value}</a>
+                    //     } else {
+                    //         if (ruler.idx===data.row.original.idx) {
+                    //             return <>{'-'}</>
+                    //         } else {
+                    //             return <a onClick={e=>{
+                    //                 e.preventDefault();
+                    //                 const el = document.getElementById(`anchor${ruler.idx}`)
+                    //                 el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+                    //             }}>{`처음(${ruler.name.value})`}</a>        
+                    //         }
+                    //     }
+                    // } else {
+                    //     return <>{'-'}</>
+                    // }
+                },
+            },                
+            // {
+            //     Header: T('Ruler'),
+            //     // accessor: 'rulerNum',
+            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'rulerNum'}),
+            // },
             {
                 Header: T('Famliy'),
-                accessor: 'family',
+                // accessor: 'family',
+                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'family'}),
             },
-            {
-                Header: T('Ex5'),
-                accessor: 'unknown5',
-            },
-            {
-                Header: T('Ex6'),
-                accessor: 'unknown6',
-            },
+            // {
+            //     Header: T('Ex1'),
+            //     accessor: 'unknown1',
+            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown1'}),
+            // },
+            // {
+            //     Header: T('Ex2'),
+            //     accessor: 'unknown2',
+            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown2'}),
+            // },
+            // {
+            //     Header: T('Ex3'),
+            //     accessor: 'unknown3',
+            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown3'}),
+            // },
+            // {
+            //     Header: T('Ex4'),
+            //     accessor: 'unknown4',
+            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown4'}),
+            // },
+            // {
+            //     Header: T('Ex5'),
+            //     accessor: 'unknown5',
+            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown5'}),
+            // },
+        
         ],
         [officers]
     );
@@ -1190,39 +1320,41 @@ export default (props) => {
         >
             <Paragraph
                 title={T('Home')}
-                actions={[<TextField key={1} type='file' id='file' label={'File Open'} />, <ButtonGroup key={2}
+                actions={[<TextField key={1} type='file' id='file' label={'File Open'} onChange={e=>{
+                    var file = e.target.files[0]
+                    if (file) {
+                        var fileData = new Blob([file]);
+                        setFileName(file.name)
+                        
+                        var reader = new FileReader(); 
+                        reader.readAsArrayBuffer(fileData);
+                        reader.onload = function(event) { 
+                            // binary data 
+                            const bytes = new Uint8Array(event.target.result);
+                            const len = bytes.byteLength;
+    
+                            console.log(`]]]]] file length : ${len}`);
+    
+                            setOfficers([]);
+                            setDrawOfficers([]);
+                            setSaveData(bytes);
+    
+                        }; 
+                        reader.onerror = function(error) { 
+                            // error occurred 
+                            console.log('Error : ' + error.type); 
+                        };     
+                    }
+                }} />, <ButtonGroup key={2}
                     items={[
                         {
                             label: 'Read File',
                             onClick: ()=>{
-                                // no file selected to read 
-                                if(document.querySelector("#file").value == '') { 
-                                    console.log('No file selected'); return; 
-                                } 
-                                
-                                var file = document.querySelector("#file").files[0]; 
-                                var fileData = new Blob([file]);
-                                setFileName(file.name)
-                                
-                                var reader = new FileReader(); 
-                                reader.readAsArrayBuffer(fileData);
-                                reader.onload = function(event) { 
-                                    // binary data 
-                                    const bytes = new Uint8Array(event.target.result);
-                                    const len = bytes.byteLength;
-
-                                    console.log(`]]]]] file length : ${len}`);
-
+                                if (saveData && saveData.length>0) {
                                     setOfficers([]);
                                     setDrawOfficers([]);
-                                    setSaveData(bytes);
-
-                                }; 
-                                reader.onerror = function(error) { 
-                                    // error occurred 
-                                    console.log('Error : ' + error.type); 
-                                }; 
-                                // reader.readAsBinaryString(file);                                 
+                                    setSaveData(_.cloneDeep(saveData));
+                                }                           
                             }
                         },
                         {
@@ -1298,22 +1430,22 @@ export default (props) => {
                 <Box display={'flex'} width={'100%'}>
                     <Box height={'10px'}/>
                     <Box height={'10px'}/>
-            <Box>
-            {isLoadComplete ?
-            <Table stickyHeader {...getTableProps()}  className={classes.table}>
-                <TableHead>
-                    {renderHeader()}
-                </TableHead>
-                <TableBody>
-                    {renderRows()}
-                </TableBody>
-            </Table>
-            :
+                    <Box>
+                        {isLoadComplete ?
+                        <Table stickyHeader {...getTableProps()}  className={classes.table}>
+                            <TableHead>
+                                {renderHeader()}
+                            </TableHead>
+                            <TableBody>
+                                {renderRows()}
+                            </TableBody>
+                        </Table>
+                        :
                         <div>
-            <canvas id={`allOfficer`} width="1280" height="1120" ></canvas>
+                            <canvas id={`allOfficer`} width="1280" height="1120" ></canvas>
                             <canvas id={`genericResource`} width="1280" height="1120" ></canvas>
                         </div>
-            }     
+                        }     
                     </Box>                      
                 </Box>
                 {/* <Box>
