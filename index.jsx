@@ -25,6 +25,8 @@ import {
 
 import {Add} from '@material-ui/icons';
 
+const iconv = require('iconv-lite');
+
 import Page from '../../../core/controls/Page';
 import Paragraph from '../../../core/controls/Paragraph'
 import Button, {ButtonGroup} from '../../../core/controls/button'
@@ -83,13 +85,8 @@ const changeOfficeData = (data, drawData) => {
                             data[i][pos] = value
                         }
                     } else if (obj.size>2 && k==='name') {
-                        // TextEncoder는 utf-8만 지원하므로 name은 저장하지 않음.
-                        let nameOrigin = data[i].slice(pos, pos+6)
-                        let nameOrignDecode = new TextDecoder("ks_c_5601-1987").decode(nameOrigin)
-                        console.log(`]]]]] name: ${nameOrignDecode} === ${obj.value}`)
-
-                        let nameOriginEncode = new TextEncoder("ks_c_5601-1987").encode(nameOrignDecode)
-                        console.log(`]]]]] name: ${nameOrigin} === ${nameOriginEncode}`)
+                        let nameOriginEncode = iconv.encode(obj.value, 'ks_c_5601-1987')
+                        const nameNew = nameOriginEncode.slice(0, 6)
                         data[i][pos] = nameNew[0]
                         data[i][pos+1] = nameNew[1]
                         data[i][pos+2] = nameNew[2]
@@ -218,10 +215,10 @@ const parsePersonalData = (index, data, isKor=true) => {
     //이름
     let name = '';
     if (isKor) {
-        name = setVal(index, pos, 6, (new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6))), false);
+        name = setVal(index, pos, 6, (new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6))));
         pos += 6;
     } else {
-        name = setVal(index, pos, 17, (new TextDecoder().decode(data.slice(pos, pos+17))), false);
+        name = setVal(index, pos, 17, (new TextDecoder().decode(data.slice(pos, pos+17))));
         pos += 17;
     }
 
