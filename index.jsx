@@ -51,8 +51,8 @@ function getBaseLog(x, y) {
     return logValue
 }
 
-const setVal = (index, pos, size, value, editable=true) => {
-    return { index, pos, size, value, editable, isEdit:false }
+const setVal = (cellType, index, pos, size, value, isNum=true, editable=true) => {
+    return { cellType, index, pos, size, value, isNum, editable, isEdit:false }
 }
 
 const idxFromOffset = (offset) => {
@@ -93,7 +93,7 @@ const changeOfficeData = (data, drawData) => {
                         data[i][pos+3] = nameNew[3]
                         data[i][pos+4] = nameNew[4]
                         data[i][pos+5] = nameNew[5]
-                        //(new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6)))
+                        //(new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6)))                        
                     } else {
                         let first = 0
                         let last = 0
@@ -122,16 +122,51 @@ const changeOfficeData = (data, drawData) => {
     }
 }
 
-const changeLandData = () => {
+const changeLandData = (data, drawData) => {
+    for (let i=0; i<data.length; i++) {
+        const land = drawData.find(o=>o.idx===i+1)
 
+        if (land) {
+            const keys = Object.keys(land)
+            keys.forEach(k=>{
+                if (k!=='idx'&&land[k].editable) {
+                    const obj = land[k]
+                    const value = obj.value
+                    const pos = obj.pos
+                    const size = obj.size
+
+                    if (size===1) {
+                        data[i][pos] = value
+                    } else {
+                        if (size===4&&k==='food') {
+                            data[i][pos] = value & 0xff
+                            data[i][pos+1] = (value>>8) & 0xff
+                            data[i][pos+2] = (value>>16) & 0xff
+                            data[i][pos+3] = (value>>24) & 0xff
+                        } else if (size===2) {
+                            let first = 0
+                            let last = 0
+
+                            first = value & 0xff
+                            last = (value>>8) & 0xff    
+                            data[i][pos] = first
+                            data[i][pos+1] = last
+                        } else {
+                            console.log(`]]]]] wtf ???`)
+                        }
+                    }
+                }
+            })
+        }
+    }
 }
 
 const parsePersonalData = (index, data, isKor=true) => {
     let pos = 0;
     // next officer address lower
-    const nextOfficerLower = setVal(index, pos, 1, data[pos++], false);
+    const nextOfficerLower = setVal('of', index, pos, 1, data[pos++], true, false);
     // next officer address upper
-    const nextOfficerUpper = setVal(index, pos, 1, data[pos++], false);
+    const nextOfficerUpper = setVal('of', index, pos, 1, data[pos++], true, false);
     //행동 
     /*
         0x01 : Done / Not Done
@@ -143,7 +178,7 @@ const parsePersonalData = (index, data, isKor=true) => {
         0x40 : unknown
         0x80 : unknown
     */
-    const action = setVal(index, pos, 1, data[pos++]);
+    const action = setVal('of', index, pos, 1, data[pos++]);
     //건강
     /*
         0x01 : 부상당함 (전투에서 회복하려면 3개월 걸린다.)
@@ -156,79 +191,79 @@ const parsePersonalData = (index, data, isKor=true) => {
         0x80 : 아이템 받은 상태 (일시적으로 충성도 하락에 면역)
     */
    let tmp = 0;
-    const health = setVal(index, pos, 1, data[pos++]); // 80이면 아이템 가진상태...
+    const health = setVal('of', index, pos, 1, data[pos++]); // 80이면 아이템 가진상태...
     //지력
-    const int = setVal(index, pos, 1, data[pos++]);
+    const int = setVal('of', index, pos, 1, data[pos++]);
     //무력
-    const war = setVal(index, pos, 1, data[pos++]);
+    const war = setVal('of', index, pos, 1, data[pos++]);
     //매력
-    const chm = setVal(index, pos, 1, data[pos++]);
+    const chm = setVal('of', index, pos, 1, data[pos++]);
     //인덕
-    const trust = setVal(index, pos, 1, data[pos++]);
+    const trust = setVal('of', index, pos, 1, data[pos++]);
     //의리
-    const good = setVal(index, pos, 1, data[pos++]);
+    const good = setVal('of', index, pos, 1, data[pos++]);
     //야망
-    const amb = setVal(index, pos, 1, data[pos++]);
+    const amb = setVal('of', index, pos, 1, data[pos++]);
     //모름
     tmp = data[pos++];
     // tmp : 15 > 신군주... 254로 변경해줌. 255는 무소속
-    const rulerNum = setVal(index, pos-1, 1, tmp===15?254:tmp);
+    const rulerNum = setVal('of', index, pos-1, 1, tmp===15?254:tmp);
 
     const tmp1 = tmp
 
     // pos++;
     //충성
-    const loyalty = setVal(index, pos, 1, data[pos++]);
+    const loyalty = setVal('of', index, pos, 1, data[pos++]);
     //사관
-    const off = setVal(index, pos, 1, data[pos++]);
+    const off = setVal('of', index, pos, 1, data[pos++]);
     //침투... 안했으면 0xff
-    const hide = setVal(index, pos, 1, data[pos++]);
+    const hide = setVal('of', index, pos, 1, data[pos++]);
     //모름... 침투 하면 값이 변경되긴 함.
-    const unknown1 = setVal(index, pos, 1, data[pos++]);
+    const unknown1 = setVal('of', index, pos, 1, data[pos++]);
     // pos++;
     //상성
-    const syn = setVal(index, pos, 1, data[pos++]);
+    const syn = setVal('of', index, pos, 1, data[pos++]);
     //모름
     tmp = (data[pos++] | data[pos++] << 8)
-    const family = setVal(index, pos-2, 2, (tmp===0?tmp:getBaseLog(2, tmp)+1));
+    const family = setVal('of', index, pos-2, 2, (tmp===0?tmp:getBaseLog(2, tmp)+1));
     //병사
-    const army = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8));
+    const army = setVal('of', index, pos, 2, (data[pos++] | data[pos++] << 8));
     //무장
-    const weapon = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8));
+    const weapon = setVal('of', index, pos, 2, (data[pos++] | data[pos++] << 8));
     //훈련
-    const train = setVal(index, pos, 1, data[pos++]);
+    const train = setVal('of', index, pos, 1, data[pos++]);
     //모름
-    const unknown2 = setVal(index, pos, 1, data[pos++]);
+    const unknown2 = setVal('of', index, pos, 1, data[pos++]);
     // pos++;
     //모름
-    const unknown3 = setVal(index, pos, 1, data[pos++]);
+    const unknown3 = setVal('of', index, pos, 1, data[pos++]);
     // pos++;
     //생년
-    const born = setVal(index, pos, 1, data[pos++]);
+    const born = setVal('of', index, pos, 1, data[pos++]);
     //얼굴
-    const faceMainId = setVal(index, pos, 1, data[pos++]);
+    const faceMainId = setVal('of', index, pos, 1, data[pos++]);
     //모름
-    const faceSubId = setVal(index, pos, 1, data[pos++]);
+    const faceSubId = setVal('of', index, pos, 1, data[pos++]);
 
-    const fullFace = setVal(index, pos-2, 2, (faceMainId.value | faceSubId.value << 8), false)
+    const fullFace = setVal('of', index, pos-2, 2, (faceMainId.value | faceSubId.value << 8), true, false)
 
     //이름
     let name = '';
     if (isKor) {
-        name = setVal(index, pos, 6, (new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6))));
+        name = setVal('of', index, pos, 6, (new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6))), false, true);
         pos += 6;
     } else {
-        name = setVal(index, pos, 17, (new TextDecoder().decode(data.slice(pos, pos+17))));
+        name = setVal('of', index, pos, 17, (new TextDecoder().decode(data.slice(pos, pos+17))), false, true);
         pos += 17;
     }
 
-    const unknown4 = setVal(index, pos, 1, data[pos++])
-    const unknown5 = setVal(index, pos, 1, data[pos++])
+    const unknown4 = setVal('of', index, pos, 1, data[pos++])
+    const unknown5 = setVal('of', index, pos, 1, data[pos++])
     // name = '';
 
     const offsetIdx = idxFromOffset(nextOfficerLower.value | nextOfficerUpper.value << 8)
 
-    let nextOfficer = setVal(index, 0, 2, offsetIdx, false)
+    let nextOfficer = setVal('of', index, 0, 2, offsetIdx, true, false)
 
     const officer = {
         nextOfficer,            // 2 2
@@ -273,71 +308,71 @@ const parseCountryData = (index, data, isKor=true) => {
 
     let pos = 0;
     // 통치자의 다음 도시
-    const nextCity = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8), false)
+    const nextCity = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
 
     // 태수
-    const gov = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8), false)
+    const gov = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
 
     // 재야장수
-    const freeAgent = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8))
+    const freeAgent = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
 
     // 탐색가능한 장수
-    const hideAgent = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8))
+    const hideAgent = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
 
     // 군자금
-    const gold = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8))
+    const gold = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8))
     // 군량
-    const food = setVal(index, pos, 4, (data[pos++] | data[pos++] << 8 | data[pos++] << 16 | data[pos++] << 24));
+    const food = setVal('la', index, pos, 4, (data[pos++] | data[pos++] << 8 | data[pos++] << 16 | data[pos++] << 24));
     // 인구
-    const pop = setVal(index, pos, 2, (data[pos++] | data[pos++] << 8))
+    const pop = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8))
     // 군주
-    const ruler = setVal(index, pos, 1, data[pos++])
+    const ruler = setVal('la', index, pos, 1, data[pos++], true, false)
     // 전쟁중인 군주
-    const warRuler = setVal(index, pos, 1, data[pos++])
+    const warRuler = setVal('la', index, pos, 1, data[pos++], true, false)
     // 위임
     // 0 : 직할 (위임안함)
     // 4 : 전권형위임 (생산+군사+인사)
     // 5 : 생산형위임
     // 6 : 군사형위임
     // 7 : 인사형위임
-    const provInfo1 = setVal(index, pos, 1, data[pos++])
+    const provInfo1 = setVal('la', index, pos, 1, data[pos++], true, false)
     // 모름
-    const provInfo2 = setVal(index, pos, 1, data[pos++])
+    const provInfo2 = setVal('la', index, pos, 1, data[pos++], true, false)
     // 군사형위임시 전쟁할 땅
-    const warProvince = setVal(index, pos, 1, data[pos++])
+    const warProvince = setVal('la', index, pos, 1, data[pos++], true, false)
     // 생산형위임시 돈과쌀 모으는 땅
-    const sendProvince = setVal(index, pos, 1, data[pos++])
+    const sendProvince = setVal('la', index, pos, 1, data[pos++], true, false)
     // 치수도
-    const land = setVal(index, pos, 1, data[pos++])
+    const land = setVal('la', index, pos, 1, data[pos++])
     // 충성도
-    const loy = setVal(index, pos, 1, data[pos++])
+    const loy = setVal('la', index, pos, 1, data[pos++])
     // 토지가치
-    const flood = setVal(index, pos, 1, data[pos++])
+    const flood = setVal('la', index, pos, 1, data[pos++])
     // 명마
-    const horse = setVal(index, pos, 1, data[pos++])
+    const horse = setVal('la', index, pos, 1, data[pos++])
     // 성채
-    const forts = setVal(index, pos, 1, data[pos++])
+    const forts = setVal('la', index, pos, 1, data[pos++])
     // 시세
-    const riceRate = setVal(index, pos, 1, data[pos++])
+    const riceRate = setVal('la', index, pos, 1, data[pos++])
     // 모름
-    const unknown1 = setVal(index, pos, 1, data[pos++])
+    const unknown1 = setVal('la', index, pos, 1, data[pos++], true, false)
     // prov x pos
-    const posX = setVal(index, pos, 1, data[pos++])
+    const posX = setVal('la', index, pos, 1, data[pos++], true, false)
     // prov y pos
-    const posY = setVal(index, pos, 1, data[pos++])
+    const posY = setVal('la', index, pos, 1, data[pos++], true, false)
     // prov name index (0~13) [name-number]
     // 幽州幷州冀州青州兗州司州雍州涼州徐州予州荊州揚州益州交州
     // 유주병주기주청주연주사주옹주양주서주예주형주양주익주교주
     const provPos = ['유주(幽州)', '병주(幷州)', '기주(冀州)', '청주(靑州)', '연주(兗州)', '사주(司州)', '옹주(雍州)', '양주(涼州)', '서주(徐州)', '예주(予州)', '형주(荊州)', '양주(揚州)', '익주(益州)', '교주(交州)']
 
     // 모름
-    const unknown2 = setVal(index, pos, 1, data[pos++])
+    const unknown2 = setVal('la', index, pos, 1, data[pos++], true, false)
     // 모름
-    const unknown3 = setVal(index, pos, 1, data[pos++])
+    const unknown3 = setVal('la', index, pos, 1, data[pos++], true, false)
     // 모름
-    const unknown4 = setVal(index, pos, 1, data[pos++])
+    const unknown4 = setVal('la', index, pos, 1, data[pos++], true, false)
 
-    const provNo = setVal(index, pos, 1, data[pos++])
+    const provNo = setVal('la', index, pos, 1, data[pos++])
     const provName = provPos[provNo.value]
 
     return {
@@ -1164,6 +1199,49 @@ export default (props) => {
             }
         } else return <>{'무소속'}</>
     }
+
+    const validationCheck = (field, value) => {
+
+        switch (field) {
+            case 'faceMainId':
+                {
+                    if (value<1 && value>219) return false
+                }
+                break;
+            case 'army':
+                {
+                    if (value<0 && value>10000) return false
+                }
+                break;
+            case 'weapon':
+                {
+                    if (value<0 && value>10000) return false
+                }
+                break;
+            case 'gold':
+                {
+                    if (value<0 && value>30000) return false
+                }
+                break;
+            case 'food':
+                {
+                    if (value<0 && value>3000000) return false
+                }
+                break;
+            case 'pop':
+                {
+                    if (value<0 && value>60000) return false
+                }
+                break;
+            default:
+                {
+                    if (value<0 && value>100) return false
+                }
+                break;
+        }
+
+        return true
+    }
     
     const renderCell = ({rowData, field}) => {
         const cellData = rowData[field]
@@ -1176,8 +1254,10 @@ export default (props) => {
             
             
             if (cellData.isEdit || false) {
-                return <TextField value={cellData.value} onChange={e=>{
+                return <TextField type={cellData.isNum?'number':'text'} value={cellData.value} onChange={e=>{
+                    if (validationCheck(field, e.target.value)) {
                     cellData.value = e.target.value
+                    }
                     forceRender({})
                 }} onBlur={e=>{
                     cellData.isEdit = false
@@ -1441,7 +1521,7 @@ export default (props) => {
                         accessor: 'idx',
                     },
                     {
-                        Header: T('Province Nanme'),
+                        Header: T('Province Name'),
                         Cell: (data) => {return <>{`${data.row.original.provName}(${data.row.original.idx})`}</>},
                     },
                     {
@@ -1462,7 +1542,7 @@ export default (props) => {
                         Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'gold'}),
                     },
                     {
-                        Header: T('food'),
+                        Header: T('Food'),
                         Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'food'}),
                     },
                     {
@@ -1771,7 +1851,7 @@ export default (props) => {
                                 })
                                 bytes.set(dummy1, offset)
                                 offset += dummy1.length
-        // changeLandData()
+        changeLandData(lands, drawLands)
                                 lands.forEach(e=>{
                                     bytes.set(e, offset)
                                     offset += e.length
@@ -1795,7 +1875,8 @@ export default (props) => {
                                     type: 'application/octet-stream'
                                   })
                                 const url = window.URL.createObjectURL(blob)
-                                downloadURL(url, `${fileName}_save`)
+        // downloadURL(url, `${fileName}_save`)
+        downloadURL(url, `${fileName}`)
                                 setTimeout(()=>{
                                     return window.URL.revokeObjectURL(url)
                                 }, 1000)
