@@ -352,7 +352,7 @@ const parseRulerData = (index, data, drawOfficeArray) => {
     ruler.unknown7 = setVal('ru', index, pos, 1, data[pos++], true, false)
     ruler.unknown8 = setVal('ru', index, pos, 1, data[pos++], true, false)
     ruler.unknown9 = setVal('ru', index, pos, 1, data[pos++], true, false)
-    ruler.unknown10 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown10 = setVal('ru', index, pos, 1, data[pos++], true, false) // 결혼당하면(?) 값이 바뀜.
     // delete ruler.ukn7
     // delete ruler.ukn8
     // delete ruler.ukn9
@@ -376,6 +376,7 @@ const parseRulerData = (index, data, drawOfficeArray) => {
 
     let corr = []
 
+    // 14~29
     for (let i=0; i<16; i++) {
         ruler[`corr${i+1}`] = setVal('ru', index, pos, 1, data[pos++], true, false)
         corr.push(ruler[`corr${i+1}`].value)
@@ -383,14 +384,15 @@ const parseRulerData = (index, data, drawOfficeArray) => {
     }
     ruler.correspond = corr
 
-    for (let i=0; i<9; i++) {
+    for (let i=0; i<11; i++) {
         ruler[`unknown${15+i}`] = setVal('ru', index, pos, 1, data[pos++], true, false)
         // delete ruler[`ukn${pos}`]
+        // 4번째값은 딸이 있는 경우 255 / 혼인해서 없는 경우 0이 됨. (255로 고치면 계속 혼인 시키는 거 가능)
     }
 
 
     console.log(`]]]]] ${ruler.rulerName}[${homeIdx}], Advisor : ${ruler.advisorName}, Alliance : [${ruler.alliance.join('/')}], corr : [${corr.join('/')}]`)
-    // console.log(`]]]]] ${ruler.rulerName}[${homeIdx}], Advisor : ${ruler.advisorName}, Alliance : [${ruler.alliance.join('/')}], corr : [${corr.join('/')}], str : ${str}`)
+    // console.log(`]]]]] ${ruler.rulerName}[${homeIdx}], Advisor : ${ruler.advisorName}, Alliance : [${ruler.alliance.join('/')}], corr : [${corr.join('/')}], 12~13 : ${ruler.unknown13.value | ruler.unknown14.value << 8} ,str : ${str}`)
 
     return ruler
 }
