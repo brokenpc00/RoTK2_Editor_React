@@ -198,9 +198,9 @@ const parsePersonalData = (index, data, isKor=true) => {
     const war = setVal('of', index, pos, 1, data[pos++]);
     //매력
     const chm = setVal('of', index, pos, 1, data[pos++]);
-    //인덕
-    const trust = setVal('of', index, pos, 1, data[pos++]);
     //의리
+    const trust = setVal('of', index, pos, 1, data[pos++]);
+    //인덕
     const good = setVal('of', index, pos, 1, data[pos++]);
     //야망
     const amb = setVal('of', index, pos, 1, data[pos++]);
@@ -303,6 +303,97 @@ const parsePersonalData = (index, data, isKor=true) => {
 
     return officer
 };
+
+const parseRulerData = (index, data, drawOfficeArray) => {
+    // ruler data size = 41
+    const length = 41
+
+    let pos = 0;
+
+    const ruler = {}
+
+    let str = ''
+
+    for (let i=0; i<length; i++) {
+        ruler[`ukn${i+1}`] = data[i]
+        if (str!=='') {
+            str += ', '
+        }
+        str += `${ruler[`ukn${i+1}`]}`
+    }
+
+    // 0, 1
+    const rulerPos = setVal('ru', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    ruler.rulerPos = rulerPos
+    ruler.rulerIdx = idxFromOffset(rulerPos.value)
+    ruler.rulerName = ((drawOfficeArray.find(e=>e.idx===ruler.rulerIdx)||{}).name||{}).value || ''
+    // delete ruler.ukn1
+    // delete ruler.ukn2
+
+    // 2, 3
+    const homeTown = setVal('ru', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    const homeIdx = (homeTown.value - 9930)/35+1
+
+    ruler.homeTown = homeTown
+    ruler.homeIdx = homeIdx
+    // delete ruler.ukn3
+    // delete ruler.ukn4
+
+    // 4, 5
+    let advisor = setVal('ru', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    let advisorIdx = idxFromOffset(advisor.value)
+    ruler.advisor = advisor
+    ruler.advisorIdx = advisorIdx
+    ruler.advisorName = ((drawOfficeArray.find(e=>e.idx===ruler.advisorIdx)||{}).name||{}).value || '공석'
+    // delete ruler.ukn5
+    // delete ruler.ukn6
+
+    // 6, 7, 8, 9
+    ruler.unknown7 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown8 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown9 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown10 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    // delete ruler.ukn7
+    // delete ruler.ukn8
+    // delete ruler.ukn9
+    // delete ruler.ukn10
+
+    // 10, 11 alliance
+    let allianceFirst = setVal('ru', index, pos, 1, data[pos++], true, false)
+    let allianceSecond = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.allianceFirst = allianceFirst
+    ruler.allianceSecond = allianceSecond
+    ruler.alliance = [allianceFirst.value&0x01, allianceFirst.value&0x02, allianceFirst.value&0x04, allianceFirst.value&0x08, allianceFirst.value&0x10, allianceFirst.value&0x20, allianceFirst.value&0x40, allianceFirst.value&0x80, allianceSecond.value&0x01, allianceSecond.value&0x02, allianceSecond.value&0x04, allianceSecond.value&0x08, allianceSecond.value&0x10, allianceSecond.value&0x20, allianceSecond.value&0x40, allianceSecond.value&0x80]
+    // delete ruler.ukn11
+    // delete ruler.ukn12
+
+
+    // 12, 13
+    ruler.unknown13 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown14 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    // delete ruler.ukn13
+    // delete ruler.ukn14
+
+    let corr = []
+
+    for (let i=0; i<16; i++) {
+        ruler[`corr${i+1}`] = setVal('ru', index, pos, 1, data[pos++], true, false)
+        corr.push(ruler[`corr${i+1}`].value)
+        // delete ruler[`ukn${pos}`]
+    }
+    ruler.correspond = corr
+
+    for (let i=0; i<9; i++) {
+        ruler[`unknown${15+i}`] = setVal('ru', index, pos, 1, data[pos++], true, false)
+        // delete ruler[`ukn${pos}`]
+    }
+
+
+    console.log(`]]]]] ${ruler.rulerName}[${homeIdx}], Advisor : ${ruler.advisorName}, Alliance : [${ruler.alliance.join('/')}], corr : [${corr.join('/')}]`)
+    // console.log(`]]]]] ${ruler.rulerName}[${homeIdx}], Advisor : ${ruler.advisorName}, Alliance : [${ruler.alliance.join('/')}], corr : [${corr.join('/')}], str : ${str}`)
+
+    return ruler
+}
 
 const parseCountryData = (index, data, isKor=true) => {
 
@@ -421,9 +512,11 @@ export default (props) => {
     const [header, setHeader] = useState([]);
     const [officers, setOfficers] = useState([]);
     const [drawOfficers, setDrawOfficers] = useState([]);
-    const [dummy1, setDummy1] = useState([]);
+    const [rulersData, setRulersData] = useState([]);
+    const [drawRulersData, setDrawRulersData] = useState([]);
     const [lands, setLands] = useState([]);
     const [drawLands, setDrawLands] = useState([]);
+    const [dummy1, setDummy1] = useState([]);
     const [dummy2, setDummy2] = useState([]);
     const [isLoadComplete, setIsLoadComplete] = useState(false);
 
@@ -583,11 +676,18 @@ export default (props) => {
                 setHeader(headerArray);
                 totalSum += length;
 
-                setCurrentYear(headerArray[12])
+                setCurrentYear(headerArray[12] | (headerArray[13] << 8) )
                 setCurrentMonth(headerArray[14]+1)
+
+                const numberOfRuler = headerArray[15]
+                // color of each ruler (Ruler0 ~ Ruler14)
+                const colorOfEachRuler = headerArray.slice(16, 31)
+
 
                 const headerSize = offset;
                 // console.log(`]]]]] headerSize : ${headerSize} === ${headerArray.length})`);
+
+                console.log(`]]]]] officer offset : ${offset}`)
 
                 const officerArray = [];
                 const drawOfficeArray = [];
@@ -616,15 +716,45 @@ export default (props) => {
                 // console.log(`]]]]] offierSize : ${officerSize} === ${officerArray.length}x36(${officerArray.length*36})`);
 
 
+                console.log(`]]]]] dummy1 offset : ${offset}`)
+
                 start = offset;
-                length = 662;
+                length = 6;
                 offset = start + length;
                 var unKnownDummy1 = data.slice(start, offset);
                 setDummy1(unKnownDummy1);
                 totalSum += length;
 
                 const dummy1Size = offset-headerSize-officerSize;
-                // console.log(`]]]]] dummy1Size : ${dummy1Size} === ${unKnownDummy1.length}(668)`);
+
+                console.log(`]]]]] rulersData offset : ${offset}`)
+
+                // start = offset;
+                // length = 656;
+                // offset = start + length;
+                const rulersArray = []
+                const drawRulersArray = [];
+
+
+                for (let i=0; i<16; i++) {
+                    start = offset
+                    // ruler size 41
+                    length = 41
+                    offset = start + length
+                    const rulerData = data.slice(start, offset)
+                    const ruler = parseRulerData(i, rulerData, drawOfficeArray);
+                    rulersArray.push(rulerData)
+                    drawRulersArray.push(ruler)
+                    totalSum += length
+                }
+
+                setRulersData(rulersArray)
+                setDrawRulersData(drawRulersArray)
+
+                const rulersDataSize = offset-headerSize-officerSize-dummy1Size;
+                // console.log(`]]]]] rulersDataSize : ${rulersDataSize} === ${rulersData.length}(668)`);
+
+                console.log(`]]]]] land offset : ${offset}`)
 
                 const landArray = [];
                 const drawLandArray = [];
@@ -644,9 +774,10 @@ export default (props) => {
                 setLands(landArray);
                 setDrawLands(drawLandArray)
 
-                const landSize = offset-headerSize-officerSize-dummy1Size;
+                const landSize = offset-headerSize-officerSize-dummy1Size-rulersDataSize;
                 // console.log(`]]]]] landSize : ${landSize} === ${landArray.length}x35(${landArray.length*35})`);
 
+                console.log(`]]]]] dummy2 offset : ${offset}`)
 
                 start = offset;
                 length = data.length-start;
@@ -655,10 +786,10 @@ export default (props) => {
                 setDummy2(unKnownDummy2);
                 totalSum += length;
 
-                const dummy2Size = offset-headerSize-officerSize-dummy1Size-landSize;
+                const dummy2Size = offset-headerSize-officerSize-dummy1Size-rulersDataSize-landSize;
                 // console.log(`]]]]] dummy2Size : ${dummy2Size} === ${unKnownDummy2.length}`);
 
-                // console.log(`]]]]] totalSize (${data.length}) === sum(${headerSize+officerSize+dummy1Size+landSize+dummy2Size}) === ${totalSum}`);
+                // console.log(`]]]]] totalSize (${data.length}) === sum(${headerSize+officerSize+rulersDataSize+landSize+dummy2Size}) === ${totalSum}`);
                 setIsLoadComplete(true);
             } else {
                 console.log(`]]]]] invalid file`);
@@ -1774,6 +1905,7 @@ export default (props) => {
             setHeader([]);
             setOfficers([]);
             setDummy1([]);
+            setRulersData([]);
             setLands([]);
             setDummy2([]);
             setDrawOfficers([]);
@@ -1793,6 +1925,9 @@ export default (props) => {
                             // binary data 
                             const bytes = new Uint8Array(event.target.result);
                             const len = bytes.byteLength;
+
+                // kor version : 28,960
+                // eng versino : 30,584
 
                             // console.log(`]]]]] file length : ${len}`);
 
@@ -1837,7 +1972,7 @@ export default (props) => {
                                     },
                                     unknown2(rest)
                                 }
-                                header.length + officers.length + dummy1.length + lands.length + dummy2.length = saveData.length
+        header.length + officers.length + dummy1.length + rulerData.length + lands.length + dummy2.length = saveData.length
                                 */
 
                                 const bytes = new Uint8Array(saveData.length);
@@ -1851,6 +1986,11 @@ export default (props) => {
                                 })
                                 bytes.set(dummy1, offset)
                                 offset += dummy1.length
+        // changeRulerData(rulersData, drawRulersData)
+        rulersData.forEach(e=>{
+            bytes.set(e, offset)
+            offset += e.length
+        })
         changeLandData(lands, drawLands)
                                 lands.forEach(e=>{
                                     bytes.set(e, offset)
@@ -1881,7 +2021,7 @@ export default (props) => {
                                     return window.URL.revokeObjectURL(url)
                                 }, 1000)
         
-        console.log(`]]]]] header(${header.length}) + officers(${officers.length*36}) + unknown1(${dummy1.length}) + lands(${lands.length*35}) + unknown2(${dummy2.length}) (${header.length+officers.length*36+dummy1.length+lands.length*35+dummy2.length}) = ${saveData.length}`)
+        console.log(`]]]]] header(${header.length}) + officers(${officers.length*36}) + unknown1(${rulersData.length}) + lands(${lands.length*35}) + unknown2(${dummy2.length}) (${header.length+officers.length*36+rulersData.length+lands.length*35+dummy2.length}) = ${saveData.length}`)
     }
 
     return (
