@@ -397,7 +397,7 @@ const parseRulerData = (index, data, drawOfficeArray) => {
     return ruler
 }
 
-const parseCountryData = (index, data, isKor=true) => {
+const parseProvinceData = (index, data, isKor=true) => {
 
     let pos = 0;
     // 통치자의 다음 도시
@@ -435,11 +435,11 @@ const parseCountryData = (index, data, isKor=true) => {
     const warProvince = setVal('la', index, pos, 1, data[pos++], true, false)
     // 생산형위임시 돈과쌀 모으는 땅
     const sendProvince = setVal('la', index, pos, 1, data[pos++], true, false)
-    // 치수도
+    // 토지가치
     const land = setVal('la', index, pos, 1, data[pos++])
     // 충성도
     const loy = setVal('la', index, pos, 1, data[pos++])
-    // 토지가치
+    // 치수도
     const flood = setVal('la', index, pos, 1, data[pos++])
     // 명마
     const horse = setVal('la', index, pos, 1, data[pos++])
@@ -449,21 +449,22 @@ const parseCountryData = (index, data, isKor=true) => {
     const riceRate = setVal('la', index, pos, 1, data[pos++])
     // 모름
     const unknown1 = setVal('la', index, pos, 1, data[pos++], true, false)
-    // prov x pos
-    const posX = setVal('la', index, pos, 1, data[pos++], true, false)
-    // prov y pos
-    const posY = setVal('la', index, pos, 1, data[pos++], true, false)
-    // prov name index (0~13) [name-number]
-    // 幽州幷州冀州青州兗州司州雍州涼州徐州予州荊州揚州益州交州
-    // 유주병주기주청주연주사주옹주양주서주예주형주양주익주교주
-    const provPos = ['유주(幽州)', '병주(幷州)', '기주(冀州)', '청주(靑州)', '연주(兗州)', '사주(司州)', '옹주(雍州)', '양주(涼州)', '서주(徐州)', '예주(予州)', '형주(荊州)', '양주(揚州)', '익주(益州)', '교주(交州)']
-
     // 모름
     const unknown2 = setVal('la', index, pos, 1, data[pos++], true, false)
     // 모름
     const unknown3 = setVal('la', index, pos, 1, data[pos++], true, false)
     // 모름
     const unknown4 = setVal('la', index, pos, 1, data[pos++], true, false)
+
+    // prov x pos
+    const posX = setVal('la', index, pos, 1, data[pos++], true, false)
+    // prov y pos
+    const posY = setVal('la', index, pos, 1, data[pos++], true, false)
+
+    // prov name index (0~13) [name-number]
+    // 幽州幷州冀州青州兗州司州雍州涼州徐州予州荊州揚州益州交州
+    // 유주병주기주청주연주사주옹주양주서주예주형주양주익주교주
+    const provPos = ['유주(幽州)', '병주(幷州)', '기주(冀州)', '청주(靑州)', '연주(兗州)', '사주(司州)', '옹주(雍州)', '양주(涼州)', '서주(徐州)', '예주(予州)', '형주(荊州)', '양주(揚州)', '익주(益州)', '교주(交州)']
 
     const provNo = setVal('la', index, pos, 1, data[pos++])
     const provName = provPos[provNo.value]
@@ -769,13 +770,13 @@ export default (props) => {
                     length = 35;
                     offset = start + length;
                     const landData = data.slice(start, offset)
-                    const landInfo = parseCountryData(i, landData);
+                    const landInfo = parseProvinceData(i, landData);
                     landInfo.idx = i+1
                     drawLandArray.push(landInfo)
                     landArray.push(landData);
                     totalSum += length;
 
-                    // console.log(`]]]]] Country: No:${i+1} >>> ${JSON.stringify(landInfo)}`);
+                    // console.log(`]]]]] Province: No:${i+1} >>> ${JSON.stringify(landInfo)}`);
                 }
                 setLands(landArray);
                 setDrawLands(drawLandArray)
