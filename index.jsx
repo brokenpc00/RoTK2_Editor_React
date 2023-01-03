@@ -314,13 +314,13 @@ const parseRulerData = (index, data, drawOfficeArray) => {
 
     let str = ''
 
-    for (let i=0; i<length; i++) {
-        ruler[`ukn${i+1}`] = data[i]
-        if (str!=='') {
-            str += ', '
-        }
-        str += `${ruler[`ukn${i+1}`]}`
-    }
+    // for (let i=0; i<length; i++) {
+    //     ruler[`ukn${i+1}`] = data[i]
+    //     if (str!=='') {
+    //         str += ', '
+    //     }
+    //     str += `${ruler[`ukn${i+1}`]}`
+    // }
 
     // 0, 1
     const rulerPos = setVal('ru', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
@@ -391,7 +391,7 @@ const parseRulerData = (index, data, drawOfficeArray) => {
     }
 
 
-    console.log(`]]]]] ${ruler.rulerName}[${homeIdx}], Advisor : ${ruler.advisorName}, Alliance : [${ruler.alliance.join('/')}], corr : [${corr.join('/')}]`)
+    // console.log(`]]]]] ${ruler.rulerName}[${homeIdx}], Advisor : ${ruler.advisorName}, Alliance : [${ruler.alliance.join('/')}], corr : [${corr.join('/')}]`)
     // console.log(`]]]]] ${ruler.rulerName}[${homeIdx}], Advisor : ${ruler.advisorName}, Alliance : [${ruler.alliance.join('/')}], corr : [${corr.join('/')}], 12~13 : ${ruler.unknown13.value | ruler.unknown14.value << 8} ,str : ${str}`)
 
     return ruler
@@ -745,8 +745,12 @@ export default (props) => {
                     offset = start + length
                     const rulerData = data.slice(start, offset)
                     const ruler = parseRulerData(i, rulerData, drawOfficeArray);
+                    const drawRuler = {
+                        idx: i+1,
+                        ...ruler
+                    }
                     rulersArray.push(rulerData)
-                    drawRulersArray.push(ruler)
+                    drawRulersArray.push(drawRuler)
                     totalSum += length
                 }
 
@@ -1376,7 +1380,7 @@ export default (props) => {
         return true
     }
     
-    const renderCell = ({rowData, field}) => {
+    const renderCell = ({fullData, rowData, field, type, arrayIndex=-1}) => {
         const cellData = rowData[field]
         
         if (cellData) {
@@ -1397,6 +1401,7 @@ export default (props) => {
                     forceRender({})
                 }}/>
             } else {
+                if (type==='of') {
                 return <Typography onClick={e=>{
                     drawOfficers.forEach(e=>{
                         Object.keys(e).forEach(k=>{
@@ -1405,10 +1410,56 @@ export default (props) => {
                             }
                         })
                     })
-
+    
+                        cellData.isEdit = true
+                        forceRender({})
+                    }}>{cellData.value}</Typography>    
+                } else if (type==='ru') {
+                    if (arrayIndex>=0) {
+                        const array = cellData
+                        const value = array[arrayIndex]
+                        return <Typography onClick={e=>{
+                            // drawRulersData.forEach(e=>{
+                            //     Object.keys(e).forEach(k=>{
+                            //         if (k!=='idx') {
+                            //             e[k].isEdit = false
+                            //         }
+                            //     })
+                            // })
+        
+                            // cellData.isEdit = true
+                            // forceRender({})
+                        }}>{value}</Typography>   
+                    } else {
+                        return <Typography onClick={e=>{
+                            drawRulersData.forEach(e=>{
+                                Object.keys(e).forEach(k=>{
+                                    if (k!=='idx') {
+                                        e[k].isEdit = false
+                                    }
+                                })
+                            })
+        
+                            cellData.isEdit = true
+                            forceRender({})
+                        }}>{cellData.value}</Typography>                           
+                    }
+ 
+                } else {
+                    return <Typography onClick={e=>{
+                        drawLands.forEach(e=>{
+                            Object.keys(e).forEach(k=>{
+                                if (k!=='idx') {
+                                    e[k].isEdit = false
+                                }
+                            })
+                        })
+    
                     cellData.isEdit = true
                     forceRender({})
                 }}>{cellData.value}</Typography>    
+            }
+
             }
 
         } else return ''
@@ -1475,82 +1526,82 @@ export default (props) => {
             {
                 Header: T('Action'),
                 // accessor: 'action.value',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'action'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'action'}),
             },
             {
                 Header: T('Health'),
                 // accessor: 'health.value',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'health'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'health'}),
             },
             {
                 Header: T('FaceId'),
                 // accessor: 'faceMainId',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'faceMainId'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'faceMainId'}),
             },
             {
                 Header: T('INT'),
                 // accessor: 'int',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'int'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'int'}),
             },
             {
                 Header: T('WAR'),
                 // accessor: 'war',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'war'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'war'}),
             },
             {
                 Header: T('Charm'),
                 // accessor: 'chm',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'chm'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'chm'}),
             },
             {
                 Header: T('Trust'),
                 // accessor: 'trust',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'trust'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'trust'}),
             },
             {
                 Header: T('Good'),
                 // accessor: 'good',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'good'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'good'}),
             },
             {
                 Header: T('Ambitious'),
                 // accessor: 'amb',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'amb'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'amb'}),
             },
             {
                 Header: T('Loyalty'),
                 // accessor: 'loyalty',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'loyalty'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'loyalty'}),
             },
             {
                 Header: T('Office'),
                 // accessor: 'off',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'off'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'off'}),
             },
             {
                 Header: T('Sync'),
                 // accessor: 'syn',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'syn'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'syn'}),
             },
             {
                 Header: T('Army'),
                 // accessor: 'army',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'army'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'army'}),
             },
             {
                 Header: T('Weapon'),
                 // accessor: 'weapon',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'weapon'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'weapon'}),
             },
             {
                 Header: T('Training'),
                 // accessor: 'train',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'train'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'train'}),
             },
             // {
             //     Header: T('Born'),
             //     // accessor: 'born',
-            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'born'}),
+                    //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'born'}),
             // },
             {
                 Header: T('Ruler Name'),
@@ -1606,48 +1657,91 @@ export default (props) => {
             // {
             //     Header: T('Ruler'),
             //     // accessor: 'rulerNum',
-            //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'rulerNum'}),
+                    //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'rulerNum'}),
             // },
             {
                 Header: T('Famliy'),
                 // accessor: 'family',
-                Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'family'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'family'}),
             },
                     {
                         Header: T('Ex1'),
                         accessor: 'unknown1',
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown1'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'unknown1'}),
                     },
                     {
                         Header: T('Ex2'),
                         accessor: 'unknown2',
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown2'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'unknown2'}),
                     },
                     {
                         Header: T('Ex3'),
                         accessor: 'unknown3',
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown3'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'unknown3'}),
                     },
                     {
                         Header: T('Ex4'),
                         accessor: 'unknown4',
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown4'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'unknown4'}),
                     },
                     {
                         Header: T('Ex5'),
                         accessor: 'unknown5',
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown5'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'of', field:'unknown5'}),
                     },
                 
                 ]
-            } else {
-                // console.log(`]]]]] lands info : ${JSON.stringify(drawLands.map(e=>{
-                //     return {
-                //         ...e.provNo,
-                //         name: e.provName
-                //     }
-                // }))}`)
+            } else if (tab==='2') {
+                // console.log(`]]]]] rulers info : ${JSON.stringify(drawRulersData)}`)
 
+                const column = [
+                    {
+                        Header: 'No',
+                        accessor: 'idx',
+                    },
+                    {
+                        Header: T('Ruler Name'),
+                        Cell: (data) => {return <>{`${data.row.original.rulerName}`}</>},
+                    },
+                    {
+                        Header: T(`Ruler's Prov`),
+                        Cell: (data) => {return <>{`${(drawLands.find(e=>e.idx===data.row.original.homeIdx)||{}).provName || ''})`}</>},
+                    },
+                    {
+                        Header: T('Advisor'),
+                        Cell: (data) => {return <>{`${data.row.original.advisorName}`}</>},
+                    },
+                ]
+
+                drawRulersData.forEach((e, idx)=>{
+                    const rulerName = e.rulerName
+                    const alliance = {
+                        Header: `${rulerName}(A)`,
+                        Cell: (data) => {
+                            if (rulerName===data.row.original.rulerName) {
+                                return <>{`-`}</>
+            } else {
+                                return renderCell({fullData: data, rowData:data.row.original, type:'ru', field:'alliance', arrayIndex:idx})
+                            }
+                        }
+                    }
+                    column.push(alliance)
+                    const correspond = {
+                        Header: `${rulerName}(C)`,
+                        Cell: (data) => {
+                            if (rulerName===data.row.original.rulerName) {
+                                return <>{`-`}</>
+                            } else {
+                                return renderCell({fullData: data, rowData:data.row.original, type:'ru', field:'correspond', arrayIndex:idx})
+                            }
+                        }
+                    }
+                    column.push(correspond)
+                })
+
+
+                return column
+            } else {
                 return [
                     {
                         Header: 'No',
@@ -1672,15 +1766,15 @@ export default (props) => {
                     },
                     {
                         Header: T('Gold'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'gold'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'gold'}),
                     },
                     {
                         Header: T('Food'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'food'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'food'}),
                     },
                     {
                         Header: T('Population'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'pop'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'pop'}),
                     },
                     {
                         Header: T('Ruler'),
@@ -1735,63 +1829,63 @@ export default (props) => {
                     },
                     {
                         Header: T('Province In WAR'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'warProvince'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'warProvince'}),
                     },
                     {
                         Header: T('Province Tribute'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'sendProvince'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'sendProvince'}),
                     },
                     {
                         Header: T('Land Develop'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'land'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'land'}),
                     },
                     {
                         Header: T('Flood Control'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'flood'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'flood'}),
                     },
                     {
                         Header: T('Loyalty'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'loy'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'loy'}),
                     },
                     {
                         Header: T('Horse'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'horse'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'horse'}),
                     },
                     {
                         Header: T('Fortress'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'forts'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'forts'}),
                     },
                     {
                         Header: T('Rice Rate'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'riceRate'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'riceRate'}),
                     },
                     {
                         Header: T('PosX'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'posX'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'posX'}),
                     },
                     {
                         Header: T('PosY'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'posY'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'posY'}),
                     },
                     {
                         Header: T('Ex1'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown1'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'unknown1'}),
                     },
                     {
                         Header: T('Ex2'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown2'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'unknown2'}),
                     },
                     {
                         Header: T('Ex3'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown3'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'unknown3'}),
                     },
                     {
                         Header: T('Ex4'),
-                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'unknown4'}),
+                        Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'unknown4'}),
                     },
             // {
                     //     Header: T('Province No'),
-                    //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, field:'provNo'}),
+                    //     Cell: (data) => renderCell({fullData: data, rowData:data.row.original, type:'la', field:'provNo'}),
             // },
                     {
                         Header: T('Free Agent'),
@@ -1833,10 +1927,10 @@ export default (props) => {
                             }
                         },
                     },
-                ]
+                ]                
             }
         },
-        [officers, drawLands, tab]
+        [officers, drawRulersData, drawLands, tab]
     );
 
     const {
@@ -1846,7 +1940,7 @@ export default (props) => {
         prepareRow,
     } = useTable({
         columns,
-        data: tab==='1'?drawOfficers:drawLands,
+        data: tab==='1'?drawOfficers:tab==='2'?drawRulersData:drawLands,
     });    
 	
 
@@ -2051,17 +2145,18 @@ export default (props) => {
             >
                 <Box width={'100%'}>
                     <Box height={'30px'} />
-                    <TabContext value={tab}>
+                    {
+                        isLoadComplete && <TabContext value={tab}>
                         <TabList indicatorColor="primary" onChange={onTab}>
                             <Tab className={classes.tab} label={<Typography variant="body2">Officers</Typography>} value="1" />
-                            <Tab className={classes.tab} label={<Typography variant="body2">Lands</Typography>} value="2" />
+                            <Tab className={classes.tab} label={<Typography variant="body2">Rulers</Typography>} value="2" />
+                            <Tab className={classes.tab} label={<Typography variant="body2">Lands</Typography>} value="3" />
                         </TabList>
                         <TabPanel value="1">
                             <Box width={'100%'}>
                                 <Box height={'20px'}/>
                                 <Box width={'100%'} height={'400px'} style={{overflowX:'auto', overflowY:'auto'}}>
-                                    {
-                                    isLoadComplete && <Table stickyHeader {...getTableProps()}  className={classes.table} >
+                                    <Table stickyHeader {...getTableProps()}  className={classes.table}>
                                         <TableHead>
                                             {renderHeader()}
                                         </TableHead>
@@ -2069,7 +2164,6 @@ export default (props) => {
                                             {renderRows()}
                                         </TableBody>
                                     </Table>
-                                    }     
                                 </Box>
                             </Box>
                         </TabPanel>
@@ -2077,8 +2171,7 @@ export default (props) => {
                             <Box width={'100%'}>
                                 <Box height={'20px'}/>
                                 <Box width={'100%'} height={'400px'} style={{overflowX:'auto', overflowY:'auto'}}>
-                                    {
-                                    isLoadComplete && <Table stickyHeader {...getTableProps()}  className={classes.table}>
+                                    <Table stickyHeader {...getTableProps()}  className={classes.table}>
                             <TableHead>
                                 {renderHeader()}
                             </TableHead>
@@ -2086,11 +2179,27 @@ export default (props) => {
                                 {renderRows()}
                             </TableBody>
                         </Table>
-                        }     
                                 </Box>
-                    </Box>                      
+                            </Box>
                         </TabPanel>
+                        <TabPanel value="3">
+                            <Box width={'100%'}>
+                                <Box height={'20px'}/>
+                                <Box width={'100%'} height={'400px'} style={{overflowX:'auto', overflowY:'auto'}}>
+                                    <Table stickyHeader {...getTableProps()}  className={classes.table}>
+                                        <TableHead>
+                                            {renderHeader()}
+                                        </TableHead>
+                                        <TableBody>
+                                            {renderRows()}
+                                        </TableBody>
+                                    </Table>
+                                </Box>
+                            </Box>
+                        </TabPanel>                        
                     </TabContext>
+                    }
+                    
                     <Box height={'10px'}/>
                     <Box height={'10px'}/>
                     <Box>
