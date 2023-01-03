@@ -161,6 +161,91 @@ const changeLandData = (data, drawData) => {
     }
 }
 
+const parseTaikiData = (index, data, isKor=true) => {
+    let pos = 0
+    // appear year 1 1
+    const appearYear = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // family 1 2
+    const familyFaceId = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // appear prov 1 3
+    const appearProv = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // unknown1 4 7
+    const unknown1 = setVal('ta', index, pos, 4, data[pos++] | data[pos++] << 8 | data[pos++] << 16 | data[pos++] << 24, true, false)
+    // int 1 8
+    const int = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // war 1 9
+    const war = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // chm 1 10
+    const chm = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // trust 1 11
+    const trust = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // good 1 12
+    const good = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // amb 1 13
+    const amb = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // rulerNum 1 (0xff) 14
+    let tmp = data[pos++];
+    // tmp : 15 > 신군주... 254로 변경해줌. 255는 무소속
+    const rulerNum = setVal('ta', index, pos-1, 1, tmp===15?254:tmp);
+    // loy 1 15
+    const loy = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // off 1 16
+    const off = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // unknown2 2 18
+    const unknown2 = setVal('ta', index, pos, 2, data[pos++] | data[pos++] << 8, true, false)
+    // syn 1 19
+    const syn = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // unknown3 9 28
+    const unknown3 = setVal('ta', index, pos, 9, data.slice(pos, pos+9), true, false)
+    pos += 9
+    // born 1 29
+    const born = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // faceMainId 1 30
+    const faceMainId = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // faceSubId 1 31
+    const faceSubId = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // name (kor 6, eng 13) 37 or 44
+    let name = {}
+    if (isKor) {
+        const text = data.slice(pos, pos+6)
+        name = setVal('ta', index, pos, 6, (new TextDecoder("ks_c_5601-1987").decode(text)), false, true);
+        pos += 6;
+    } else {
+        name = setVal('ta', index, pos, 13, (new TextDecoder().decode(data.slice(pos, pos+13))), false, true);
+        pos += 13;
+    }
+    // unknown4 2 (39 or 46)
+    const unknown4 = setVal('ta', index, pos, 2, data[pos++] | data[pos++] << 8, true, false)
+    // total 39*420+6=16,386 (eng : 46*420+6=19,326)
+
+    const taiki = {
+        appearYear,
+        familyFaceId,
+        appearProv,
+        unknown1,
+        int,
+        war,
+        chm,
+        trust,
+        good,
+        amb,
+        rulerNum,
+        loy,
+        off,
+        unknown2,
+        syn,
+        unknown3,
+        born,
+        faceMainId,
+        faceSubId,
+        faceId: faceMainId | faceSubId << 8,
+        name,
+        unknown4
+    }
+
+    return taiki
+}
+
 const parsePersonalData = (index, data, isKor=true) => {
     let pos = 0;
     // next officer address lower
@@ -250,11 +335,15 @@ const parsePersonalData = (index, data, isKor=true) => {
     //이름
     let name = '';
     if (isKor) {
-        name = setVal('of', index, pos, 6, (new TextDecoder("ks_c_5601-1987").decode(data.slice(pos, pos+6))), false, true);
+        const text = data.slice(pos, pos+6)
+        name = setVal('of', index, pos, 6, (new TextDecoder("ks_c_5601-1987").decode(text)), false, true);
+        if (name.value.trim().indexOf('감녕')>-1) {
+            console.log(`]]]]] name : ${name.value}`)
+        }
         pos += 6;
     } else {
-        name = setVal('of', index, pos, 17, (new TextDecoder().decode(data.slice(pos, pos+17))), false, true);
-        pos += 17;
+        name = setVal('of', index, pos, 13, (new TextDecoder().decode(data.slice(pos, pos+13))), false, true);
+        pos += 13;
     }
 
     const unknown4 = setVal('of', index, pos, 1, data[pos++])
@@ -290,10 +379,10 @@ const parsePersonalData = (index, data, isKor=true) => {
         born,                  // 1 26
         faceMainId,             // 1 27
         faceSubId,              // 1 28
-        name,                   // isKor ? 6(34) : 17(45)
-        unknown4,               // 1 isKor ? 35 : 46
-        unknown5,               // 1 isKor ? 36 : 47
-        fullFace,               // total isKor ? 36 : 47
+        name,                   // isKor ? 6(34) : 13(41)
+        unknown4,               // 1 isKor ? 35 : 42
+        unknown5,               // 1 isKor ? 36 : 43
+        fullFace,               // total isKor ? 36 : 43
     }
 
     if (rulerNum.value===254) {
@@ -533,6 +622,10 @@ export default (props) => {
     const [montageLoadComplete, setMontageLoadComplete] = useState(false)
     const [montageData, setMontageData] = useState([])
 
+    const [taikiLoadComplete, setTaikiLoadComplete] = useState(false)
+    const [taikiData, setTaikiData] = useState([])
+    const [drawTaikiData, setDrawTaikiData] = useState([])
+
     const [drawAllFace, setDrawAllFace] = useState(false);
 
     const [needRefresh, forceRender] = useState({})
@@ -660,6 +753,92 @@ export default (props) => {
             // }
         }
     }, [montageLoadComplete])
+
+    useEffect(()=>{
+        if (isLoadComplete && !taikiLoadComplete) {
+            fetch('http://dev.site/speech-dashboard/taiki').then(r=>{
+                const reader = r.body.getReader();
+                
+                reader.read().then(({done, value})=>{
+                    setTaikiData(value)
+                    setTaikiLoadComplete(true)
+                }).catch(e=>{
+                    setTaikiData([])
+                })
+            })            
+        } else {
+
+            const data = taikiData.slice()
+            if (data && data.length>0) {
+                let start = 0
+                let length = 6
+                let offset = start+length
+
+                let scenarioNos = data.slice(start, offset)
+
+                let scenarios = []
+                let sum = 0
+                scenarioNos.forEach(e=>{
+                    sum += e
+                    scenarios.push(sum)
+                })
+
+                let scenarioIdx = 0
+                length = 39 // kor ? 39 : 46
+                const drawTaikiDataArray = []
+                for (let i=0; i<420; i++) {
+                    start = offset
+                    offset = start + length
+                    const taiki = data.slice(start, offset)
+                    const drawTaiki = parseTaikiData(i, taiki)
+
+                    if (scenarios[scenarioIdx]===i+1 && scenarioIdx<scenarios.length-1) {
+                        scenarioIdx++
+                    } else if (scenarios[scenarioIdx]===i) {
+                        scenarioIdx = -1
+                    }
+
+                    // if (scenarioIdx===6) {
+                    //     console.log(`]]]]] i : ${i}, sum : ${scenarios[scenarioIdx]}`)
+                    // }
+                    const t = {
+                        idx: i+1,
+                        ...drawTaiki
+                    }
+
+                    if (scenarioIdx>-1) {
+                        t.scenario = scenarioIdx+1
+                    }
+                    drawTaikiDataArray.push(t)
+                    // if (t.int.value>0) {
+                    // }
+
+                    // if (officerSum===i+1&&scenarioIdx<5) {
+                    //     scenarioIdx++
+                    //     officerSum += scenarios[scenarioIdx]
+                    // } else if (officerSum>i+1) {
+                    //     scenarioIdx = -1
+                    // }
+                }
+                // console.log(`]]]]] total scenario sum : ${officerSum}, idx : ${scenarioIdx}`)
+
+                drawTaikiDataArray.forEach(e=>{
+                    const family = drawOfficers.find(f=>f.faceMainId.value===e.familyFaceId.value)
+                    let name = '-'
+                    if (family) {
+                        name = family.name.value
+                    }
+
+                    // const family = e.familyFaceId.value===255?'-':e.familyFaceId.value
+
+                    console.log(`]]]]] [${e.idx}/${e.scenario || '-'}] - ${e.name.value}[${e.born.value}] >>> apearY : ${e.appearYear.value}, prov : ${e.appearProv.value}, int : ${e.int.value}, war : ${e.war.value}, chm : ${e.chm.value}, family : ${name}, loy : ${e.loy.value}, off : ${e.off.value}, syn : ${e.syn.value}`)
+                })
+
+                setDrawTaikiData(drawTaikiDataArray)
+            }
+
+        }
+    }, [isLoadComplete, taikiLoadComplete])
 
     useEffect(()=>{
         if (saveData && saveData.length>20) {
@@ -2006,6 +2185,8 @@ export default (props) => {
             setLands([]);
             setDummy2([]);
             setDrawOfficers([]);
+            setTaikiData([])
+            setDrawTaikiData([])
         }
 
     }, [fileLoadComplete]);
