@@ -204,6 +204,9 @@ const parseTaikiData = (index, data, isKor=true) => {
     const faceMainId = setVal('ta', index, pos, 1, data[pos++], true, false)
     // faceSubId 1 31
     const faceSubId = setVal('ta', index, pos, 1, data[pos++], true, false)
+
+    const fullFace = setVal('ta', index, pos-2, 2, (faceMainId.value | faceSubId.value << 8), true, false)
+
     // name (kor 6, eng 13) 37 or 44
     let name = {}
     if (isKor) {
@@ -238,7 +241,7 @@ const parseTaikiData = (index, data, isKor=true) => {
         born,
         faceMainId,
         faceSubId,
-        faceId: faceMainId | faceSubId << 8,
+        fullFace,
         name,
         unknown4
     }
@@ -755,7 +758,7 @@ export default (props) => {
     }, [montageLoadComplete])
 
     useEffect(()=>{
-        if (isLoadComplete && !taikiLoadComplete) {
+        if (!taikiLoadComplete) {
             fetch('http://dev.site/speech-dashboard/taiki').then(r=>{
                 const reader = r.body.getReader();
                 
@@ -786,59 +789,52 @@ export default (props) => {
                 let scenarioIdx = 0
                 length = 39 // kor ? 39 : 46
                 const drawTaikiDataArray = []
-                for (let i=0; i<420; i++) {
+                const totalCount = (data.length-6)/length // If not editing, it should be 420.
+                const currentCount = 0
+                for (let i=0; i<totalCount; i++) {
                     start = offset
                     offset = start + length
                     const taiki = data.slice(start, offset)
                     const drawTaiki = parseTaikiData(i, taiki)
 
-                    if (scenarios[scenarioIdx]===i+1 && scenarioIdx<scenarios.length-1) {
-                        scenarioIdx++
-                    } else if (scenarios[scenarioIdx]===i) {
-                        scenarioIdx = -1
-                    }
-
-                    // if (scenarioIdx===6) {
-                    //     console.log(`]]]]] i : ${i}, sum : ${scenarios[scenarioIdx]}`)
-                    // }
                     const t = {
                         idx: i+1,
                         ...drawTaiki
                     }
 
+                    if (i===scenarios[scenarioIdx]) {
+                        if (scenarioIdx<5) {
+                            scenarioIdx++
+                        } else {
+                            scenarioIdx = -1
+                        }
+                    }
+
                     if (scenarioIdx>-1) {
                         t.scenario = scenarioIdx+1
                     }
-                    drawTaikiDataArray.push(t)
-                    // if (t.int.value>0) {
-                    // }
 
-                    // if (officerSum===i+1&&scenarioIdx<5) {
-                    //     scenarioIdx++
-                    //     officerSum += scenarios[scenarioIdx]
-                    // } else if (officerSum>i+1) {
-                    //     scenarioIdx = -1
-                    // }
+                    drawTaikiDataArray.push(t)
                 }
                 // console.log(`]]]]] total scenario sum : ${officerSum}, idx : ${scenarioIdx}`)
 
-                drawTaikiDataArray.forEach(e=>{
-                    const family = drawOfficers.find(f=>f.faceMainId.value===e.familyFaceId.value)
-                    let name = '-'
-                    if (family) {
-                        name = family.name.value
-                    }
+                // drawTaikiDataArray.forEach(e=>{
+                //     // const family = drawOfficers.find(f=>f.faceMainId.value===e.familyFaceId.value)
+                //     // let familyName = '-'
+                //     // if (family) {
+                //     //     familyName = family.name.value
+                //     // }
 
-                    // const family = e.familyFaceId.value===255?'-':e.familyFaceId.value
+                //     const familyName = e.familyFaceId.value===255?'-':e.familyFaceId.value
 
-                    console.log(`]]]]] [${e.idx}/${e.scenario || '-'}] - ${e.name.value}[${e.born.value}] >>> apearY : ${e.appearYear.value}, prov : ${e.appearProv.value}, int : ${e.int.value}, war : ${e.war.value}, chm : ${e.chm.value}, family : ${name}, loy : ${e.loy.value}, off : ${e.off.value}, syn : ${e.syn.value}`)
-                })
+                //     console.log(`]]]]] [${e.idx}/${e.scenario || '-'}] - ${e.name.value}[${e.born.value}] >>> apearY : ${e.appearYear.value}, prov : ${e.appearProv.value}, int : ${e.int.value}, war : ${e.war.value}, chm : ${e.chm.value}, family : ${familyName}, loy : ${e.loy.value}, off : ${e.off.value}, syn : ${e.syn.value}`)
+                // })
 
                 setDrawTaikiData(drawTaikiDataArray)
             }
 
         }
-    }, [isLoadComplete, taikiLoadComplete])
+    }, [taikiLoadComplete])
 
     useEffect(()=>{
         if (saveData && saveData.length>20) {
@@ -1072,12 +1068,12 @@ export default (props) => {
     //     return offset + bytes
     // }
 
-    const getGenericFaceData = (width, height, data) => {
+    const getGenericFaceData = (width, height, fullFace) => {
         
-        const {idx, name, fullFace} = data
+        // const {idx, name, fullFace} = data
 
         // 8 가지 sets의 pointer (50688 / 8 = 6336 bytes)
-        const group = fullFace.value&0x07
+        const group = fullFace&0x07
         let setLength = 6336;
 
         let start = group*setLength;
@@ -1089,12 +1085,12 @@ export default (props) => {
 
         // 6336 bytes = 50688 bits
         // 50688 bits = 1set에 16896 pixels 을 표현가능
-        const upperType = (fullFace.value>>3)&0x03
-        const lowerType = (fullFace.value>>5)&0x03
-        const eyeType = (fullFace.value>>7)&0x03
-        const noseType = (fullFace.value>>9)&0x03
-        const mouthType = (fullFace.value>>11)&0x03
-        const faceType = (fullFace.value>>13)&0x07
+        const upperType = (fullFace>>3)&0x03
+        const lowerType = (fullFace>>5)&0x03
+        const eyeType = (fullFace>>7)&0x03
+        const noseType = (fullFace>>9)&0x03
+        const mouthType = (fullFace>>11)&0x03
+        const faceType = (fullFace>>13)&0x07
 
         // console.log(`]]]]] ${name}[${faceType}] > Offset : ${offset}, UpperType : ${upperType}, LowerType : ${lowerType}, EyeType : ${eyeType}, NoseType : ${noseType}, MouthType : ${mouthType}`)
 
@@ -1405,21 +1401,19 @@ export default (props) => {
     }
 
 
-    const renderOfficeFace = (data) => {
+    const renderOfficeFace = (id, faceMainId, faceSubId, fullFace) => {
 
         // return <></>
 
-        var row = data.row;
-
-        var canvas = document.getElementById(`officer-${row.id}`);
+        var canvas = document.getElementById(`officer-${id}`);
         if (canvas && typeof canvas !== 'undefined') {
             var ctx = canvas.getContext('2d');
             if (faceRawData.length>0) {
 
-                if (row.original.faceSubId.value>=0x01 && row.original.faceSubId.value<=0xff) {
+                if (faceSubId>=0x01 && faceSubId<=0xff) {
                     const width = 64
                     const height = 40
-                    const faceData = getGenericFaceData(width, height, row.original)
+                    const faceData = getGenericFaceData(width, height, fullFace)
                     var imgData = ctx.createImageData(width, height*2); // imgData.data 10240 elements
                     for (let i=0; i<faceData.length; i++) {
                         imgData.data[i] = faceData[i];
@@ -1429,7 +1423,7 @@ export default (props) => {
                     return (
                         <>
                             <>
-                                <canvas id={`officer-${row.id}`} width={`${width}`} height={`${height*2}`} ></canvas>
+                                <canvas id={`officer-${id}`} width={`${width}`} height={`${height*2}`} ></canvas>
                             </>
                             {/* <>
                                 sub 1 : {`${row.original.faceMainId.value}/${row.original.faceSubId.value}`}
@@ -1438,7 +1432,7 @@ export default (props) => {
                         </>
                     );
                 } else {
-                    const idx = row.original.faceMainId.value;
+                    const idx = faceMainId;
                     const faceData = getFaceData(idx); // 2560 elements
                     var imgData = ctx.createImageData(64, 80); // imgData.data 10240 elements
     
@@ -1462,7 +1456,7 @@ export default (props) => {
         return (
             <>
                 <>
-            <canvas id={`officer-${row.id}`} width="64" height="80" ></canvas>
+            <canvas id={`officer-${id}`} width="64" height="80" ></canvas>
                 </>
                 
             {/* {
@@ -1656,6 +1650,8 @@ export default (props) => {
 
     const columns = useMemo(
         () => {
+
+            if (isLoadComplete) {
             if (tab==='1') {
                 return [
             {
@@ -1701,7 +1697,7 @@ export default (props) => {
             // {
             //     Header: T('Face'),
             //     accessor: 'face',
-            //     Cell: (data) => renderOfficeFace(data),
+                        //     Cell: (data) => renderOfficeFace(data.row.id, data.row.original.faceMainId.value, data.row.original.faceSubId.value, data.row.original.fullFace.value),
             // },
             {
                 Header: T('Action'),
@@ -1873,7 +1869,7 @@ export default (props) => {
                 ]
             } else if (tab==='2') {
                 // console.log(`]]]]] rulers info : ${JSON.stringify(drawRulersData)}`)
-
+    
                 const column = [
                     {
                         Header: 'No',
@@ -1892,7 +1888,7 @@ export default (props) => {
                         Cell: (data) => {return <>{`${data.row.original.advisorName}`}</>},
                     },
                 ]
-
+    
                 drawRulersData.forEach((e, idx)=>{
                     const rulerName = e.rulerName
                     const alliance = {
@@ -1918,10 +1914,10 @@ export default (props) => {
                     }
                     column.push(correspond)
                 })
-
-
+    
+    
                 return column
-            } else {
+                } else if (tab==='3') {
                 return [
                     {
                         Header: 'No',
@@ -2078,7 +2074,7 @@ export default (props) => {
                             } else {
                                 return <>{'-'}</>
                             }
-
+    
                         },
                     },
                     {
@@ -2092,7 +2088,7 @@ export default (props) => {
                             } else {
                                 return <>{'-'}</>
                             }
-
+    
                         },
                     },                    
                     {
@@ -2107,10 +2103,105 @@ export default (props) => {
                             }
                         },
                     },
-                ]                
+                    ]
+                }
+            } else {
+                if (taikiLoadComplete) {
+                    // drawTaikiData.forEach(e=>{
+                    //     // const family = drawOfficers.find(f=>f.faceMainId.value===e.familyFaceId.value)
+                    //     // let familyName = '-'
+                    //     // if (family) {
+                    //     //     familyName = family.name.value
+                    //     // }
+    
+                    //     const familyName = e.familyFaceId.value===255?'-':e.familyFaceId.value
+    
+                    //     console.log(`]]]]] [${e.idx}/${e.scenario || '-'}] - ${e.name.value}[${e.born.value}] >>> apearY : ${e.appearYear.value}, prov : ${e.appearProv.value}, int : ${e.int.value}, war : ${e.war.value}, chm : ${e.chm.value}, family : ${familyName}, loy : ${e.loy.value}, off : ${e.off.value}, syn : ${e.syn.value}`)
+                    // })
+                    return [
+                        {
+                            Header: 'No',
+                            accessor: 'idx',
+                        },
+                        {
+                            Header: 'ScenarioNo',
+                            Cell: (data) => {
+                                return <>{data.row.original.scenario || '-'}</>
+                            }
+                        },
+                        // {
+                        //     Header: T('Face'),
+                        //     accessor: 'face',
+                        //     Cell: (data) => renderOfficeFace(data.row.id, data.row.original.faceMainId.value, data.row.original.faceSubId.value, data.row.original.fullFace.value),
+                        // },
+                        {
+                            Header: 'Name',
+                            Cell: (data) => {
+                                return <>{data.row.original.name.value || '-'}</>
+                            }
+                        },
+                        {
+                            Header: 'Born',
+                            Cell: (data) => {
+                                return <>{data.row.original.born.value || '-'}</>
+                            }
+                        },
+                        {
+                            Header: 'Appear Year',
+                            Cell: (data) => {
+                                return <>{data.row.original.appearYear.value || '-'}</>
+                            }
+                        },
+                        {
+                            Header: 'Appear Province',
+                            Cell: (data) => {
+                                return <>{data.row.original.appearProv.value || ''}</>
+                            }
+                        },
+                        {
+                            Header: 'INT',
+                            Cell: (data) => {
+                                return <>{data.row.original.int.value || ''}</>
+                            }
+                        },
+                        {
+                            Header: 'WAR',
+                            Cell: (data) => {
+                                return <>{data.row.original.war.value || ''}</>
+                            }
+                        },
+                        {
+                            Header: 'CHM',
+                            Cell: (data) => {
+                                return <>{data.row.original.chm.value || ''}</>
             }
         },
-        [officers, drawRulersData, drawLands, tab]
+                        {
+                            Header: 'Famliy',
+                            Cell: (data) => {
+                                const familyFaceId = data.row.original.familyFaceId.value
+                                // if (familyFaceId===255) {
+                                //     return <>{'-'}</>
+                                // } else {
+                                //     return renderOfficeFace(`${data.row.id}-f`, familyFaceId, 0, 0)
+                                // }
+                                return <>{familyFaceId===255?'-':familyFaceId}</>
+                            }
+                        },
+                        {
+                            Header: 'SYN',
+                            Cell: (data) => {
+                                return <>{data.row.original.syn.value}</>
+                            }
+                        }
+                    ]
+                } else {
+                    return []
+                }
+            }
+
+        },
+        [officers, drawRulersData, drawLands, drawTaikiData, tab]
     );
 
     const {
@@ -2120,7 +2211,7 @@ export default (props) => {
         prepareRow,
     } = useTable({
         columns,
-        data: tab==='1'?drawOfficers:tab==='2'?drawRulersData:drawLands,
+        data: isLoadComplete?tab==='1'?drawOfficers:tab==='2'?drawRulersData:drawLands:drawTaikiData,
     });    
 	
 
@@ -2380,6 +2471,23 @@ export default (props) => {
                             </Box>
                         </TabPanel>                        
                     </TabContext>
+                    }
+                    {
+                        !isLoadComplete&&taikiLoadComplete&&<>
+                            <Box width={'100%'}>
+                                <Box height={'20px'}/>
+                                <Box width={'100%'} height={'400px'} style={{overflowX:'auto', overflowY:'auto'}}>
+                                    <Table stickyHeader {...getTableProps()}  className={classes.table}>
+                                        <TableHead>
+                                            {renderHeader()}
+                                        </TableHead>
+                                        <TableBody>
+                                            {renderRows()}
+                                        </TableBody>
+                                    </Table>
+                                </Box>
+                            </Box>                        
+                        </>
                     }
                     
                     <Box height={'10px'}/>
