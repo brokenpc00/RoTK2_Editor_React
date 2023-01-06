@@ -790,7 +790,6 @@ export default (props) => {
                 length = 39 // kor ? 39 : 46
                 const drawTaikiDataArray = []
                 const totalCount = (data.length-6)/length // If not editing, it should be 420.
-                const currentCount = 0
                 for (let i=0; i<totalCount; i++) {
                     start = offset
                     offset = start + length
@@ -2123,39 +2122,66 @@ export default (props) => {
                             Header: 'No',
                             accessor: 'idx',
                         },
-                        {
-                            Header: 'ScenarioNo',
-                            Cell: (data) => {
-                                return <>{data.row.original.scenario || '-'}</>
-                            }
-                        },
                         // {
-                        //     Header: T('Face'),
-                        //     accessor: 'face',
-                        //     Cell: (data) => renderOfficeFace(data.row.id, data.row.original.faceMainId.value, data.row.original.faceSubId.value, data.row.original.fullFace.value),
+                        //     Header: 'ScenarioNo',
+                        //     Cell: (data) => {
+                        //         return <>{data.row.original.scenario || '-'}</>
+                        //     }
                         // },
                         {
-                            Header: 'Name',
+                            Header: `Name(Scenario)`,
                             Cell: (data) => {
-                                return <>{data.row.original.name.value || '-'}</>
+                                return <>{data.row.original.name.value || '-'}{data.row.original.scenario&&`(${data.row.original.scenario})`}</>
+                            }
+                        },
+                        {
+                            Header: T('Face'),
+                            accessor: 'face',
+                            Cell: (data) => {
+                                const faceMainId = data.row.original.faceMainId.value
+                                const faceSubId = data.row.original.faceSubId.value
+                                if (faceSubId>0) {
+                                    return <>{`${faceMainId}/${faceSubId}`}</>
+                                } else {
+                                    return <>{faceMainId}</>
+                                }
+                                return renderOfficeFace(data.row.id, data.row.original.faceMainId.value, data.row.original.faceSubId.value, data.row.original.fullFace.value)
+                            },
+                        },
+                        {
+                            Header: 'Famliy',
+                            Cell: (data) => {
+                                const familyFaceId = data.row.original.familyFaceId.value
+                                return <>{familyFaceId===255?'-':familyFaceId}</>
+                                if (familyFaceId===255) {
+                                    return <>{'-'}</>
+                                } else {
+                                    return renderOfficeFace(`${data.row.id}-f`, familyFaceId, 0, 0)
+                                }
+                            }
+                        },
+                        {
+                            Header: 'SYN',
+                            Cell: (data) => {
+                                return <>{data.row.original.syn.value}</>
                             }
                         },
                         {
                             Header: 'Born',
                             Cell: (data) => {
-                                return <>{data.row.original.born.value || '-'}</>
+                                return <>{data.row.original.born.value+1 || '-'}</>
                             }
                         },
                         {
                             Header: 'Appear Year',
                             Cell: (data) => {
-                                return <>{data.row.original.appearYear.value || '-'}</>
+                                return <>{data.row.original.appearYear.value+1 || '-'}</>
                             }
                         },
                         {
                             Header: 'Appear Province',
                             Cell: (data) => {
-                                return <>{data.row.original.appearProv.value || ''}</>
+                                return <>{data.row.original.appearProv.value+1 || ''}</>
                             }
                         },
                         {
@@ -2177,21 +2203,21 @@ export default (props) => {
             }
         },
                         {
-                            Header: 'Famliy',
+                            Header: 'TRUST',
                             Cell: (data) => {
-                                const familyFaceId = data.row.original.familyFaceId.value
-                                // if (familyFaceId===255) {
-                                //     return <>{'-'}</>
-                                // } else {
-                                //     return renderOfficeFace(`${data.row.id}-f`, familyFaceId, 0, 0)
-                                // }
-                                return <>{familyFaceId===255?'-':familyFaceId}</>
+                                return <>{data.row.original.trust.value || ''}</>
                             }
                         },
                         {
-                            Header: 'SYN',
+                            Header: 'GOOD',
                             Cell: (data) => {
-                                return <>{data.row.original.syn.value}</>
+                                return <>{data.row.original.good.value || ''}</>
+                            }
+                        },
+                        {
+                            Header: 'AMB',
+                            Cell: (data) => {
+                                return <>{data.row.original.amb.value || ''}</>
                             }
                         }
                     ]
