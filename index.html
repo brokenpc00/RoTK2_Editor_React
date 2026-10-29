@@ -1,0 +1,1024 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>삼국지2 에디터</title>
+<style>
+    :root {
+        --bg: #f5f5f5;
+        --paper: #ffffff;
+        --text: #222222;
+        --muted: #777777;
+        --line: #e0e0e0;
+        --accent: #1976d2;
+        --changed: #fff3c4;
+        --error: #d32f2f;
+    }
+    @media (prefers-color-scheme: dark) {
+        :root {
+            --bg: #1b1b1b;
+            --paper: #262626;
+            --text: #e8e8e8;
+            --muted: #9a9a9a;
+            --line: #3a3a3a;
+            --accent: #64b5f6;
+            --changed: #5a4b12;
+            --error: #ef5350;
+        }
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    }
+    .toolbar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        padding: 12px 16px;
+        background: var(--paper);
+        border-bottom: 1px solid var(--line);
+    }
+    .toolbar strong { font-size: 16px; margin-right: 8px; }
+    .btn, button {
+        display: inline-block;
+        padding: 5px 12px;
+        border: 1px solid var(--accent);
+        border-radius: 4px;
+        background: transparent;
+        color: var(--accent);
+        font: inherit;
+        cursor: pointer;
+    }
+    button:disabled { opacity: .4; cursor: default; }
+    .muted { color: var(--muted); }
+    .spacer { flex: 1; }
+    #tabs { display: flex; gap: 4px; padding: 8px 16px 0; }
+    #tabs button { border-radius: 4px 4px 0 0; border-bottom: none; }
+    #tabs button.active { background: var(--accent); color: var(--paper); }
+    #view { padding: 0 16px 16px; }
+    .table-wrap {
+        height: calc(100vh - 140px);
+        min-height: 300px;
+        overflow: auto;
+        background: var(--paper);
+        border: 1px solid var(--line);
+    }
+    table { border-collapse: separate; border-spacing: 0; white-space: nowrap; }
+    th, td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+    th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: var(--paper);
+        font-weight: 600;
+    }
+    td { background: var(--paper); }
+    th.fix1, td.fix1 { position: sticky; left: 0; width: 56px; min-width: 56px; z-index: 1; }
+    th.fix2, td.fix2 { position: sticky; left: 56px; z-index: 1; border-right: 1px solid var(--line); }
+    th.fix1, th.fix2 { z-index: 3; }
+    td.edit { cursor: pointer; }
+    td.edit:hover { outline: 1px dashed var(--accent); outline-offset: -2px; }
+    td.changed { background: var(--changed); }
+    td input { width: 80px; font: inherit; padding: 2px 4px; }
+    td input.invalid { border-color: var(--error); outline: 1px solid var(--error); }
+    td canvas { display: block; image-rendering: pixelated; }
+    a.link { color: var(--accent); cursor: pointer; text-decoration: underline; }
+    a.prev { margin-right: 6px; text-decoration: none; }
+    tr.flash td { animation: flash 1.2s; }
+    @keyframes flash { from { background: var(--changed); } }
+    .faces { background: var(--paper); border: 1px solid var(--line); padding: 8px; overflow: auto; }
+    .faces canvas { image-rendering: pixelated; max-width: 100%; }
+    .empty { padding: 40px 0; color: var(--muted); }
+    .empty li { margin: 4px 0; }
+</style>
+</head>
+<body>
+<header class="toolbar">
+    <strong>삼국지2 에디터</strong>
+    <label class="btn">세이브 파일 열기<input type="file" id="saveInput" hidden></label>
+    <span id="fileName" class="muted">선택된 파일 없음</span>
+    <button id="reloadBtn" disabled title="수정한 내용을 버리고 파일을 다시 읽습니다">다시 읽기</button>
+    <button id="saveBtn" disabled>저장</button>
+    <span id="gameDate" class="muted"></span>
+    <span class="spacer"></span>
+    <label class="btn" title="KAODATA.DAT, MONTAGE.DAT, TAIKI.DAT를 한 번에 선택할 수 있습니다">게임 리소스 열기<input type="file" id="resInput" multiple hidden></label>
+    <span id="resStatus" class="muted"></span>
+</header>
+<nav id="tabs"></nav>
+<main id="view"></main>
+
+<script>
+// ---------------------------------------------------------------------------
+// 세이브 파일 구조 (한글판)
+//   header(32) + officer(36*255) + dummy1(6) + ruler(41*16) + land(35*41) + dummy2(rest)
+// ---------------------------------------------------------------------------
+const HEADER_SIZE = 32
+const OFFICER_SIZE = 36
+const OFFICER_COUNT = 255
+const DUMMY1_SIZE = 6
+const RULER_SIZE = 41
+const RULER_COUNT = 16
+const LAND_SIZE = 35
+const LAND_COUNT = 41
+const OFFICER_BASE = HEADER_SIZE
+const RULER_BASE = OFFICER_BASE + OFFICER_SIZE * OFFICER_COUNT + DUMMY1_SIZE
+const LAND_BASE = RULER_BASE + RULER_SIZE * RULER_COUNT
+
+const KAO_FACE_SIZE = 960
+const KAO_FACE_COUNT = 219
+const MONTAGE_SET_SIZE = 6336
+
+const LIMITS = {
+    army: 10000,
+    weapon: 10000,
+    gold: 30000,
+    food: 3000000,
+    pop: 60000,
+}
+
+function getBaseLog(x, y) {
+    return Math.log(y) / Math.log(x)
+}
+
+const setVal = (cellType, index, pos, size, value, isNum=true, editable=true) => {
+    return { cellType, index, pos, size, value, orig: value, isNum, editable }
+}
+
+const idxFromOffset = (offset) => {
+    return offset>0?((offset - 88)/36 + 1):0
+}
+
+// 이름 뒤의 0x00 채움은 빼고 보여준다 (저장할 때 다시 0x00으로 채운다).
+const decodeName = (bytes) => new TextDecoder('euc-kr').decode(bytes).replace(/\0+$/, '')
+
+// 브라우저에는 EUC-KR 인코더가 없으므로 디코더로 역방향 표를 만든다.
+let eucKrTable = null
+const encodeEucKr = (str) => {
+    if (!eucKrTable) {
+        eucKrTable = new Map()
+        const decoder = new TextDecoder('euc-kr')
+        for (let lead=0x81; lead<=0xfe; lead++) {
+            for (let trail=0x41; trail<=0xfe; trail++) {
+                const ch = decoder.decode(new Uint8Array([lead, trail]))
+                if (ch.length===1 && ch!=='�' && !eucKrTable.has(ch)) {
+                    eucKrTable.set(ch, [lead, trail])
+                }
+            }
+        }
+    }
+    const out = []
+    for (const ch of str) {
+        const code = ch.codePointAt(0)
+        if (code<0x80) {
+            out.push(code)
+        } else {
+            const pair = eucKrTable.get(ch)
+            if (!pair) throw new Error(`EUC-KR로 저장할 수 없는 글자입니다: ${ch}`)
+            out.push(...pair)
+        }
+    }
+    return out
+}
+
+// ---------------------------------------------------------------------------
+// 파싱
+// ---------------------------------------------------------------------------
+const parseTaikiData = (index, data) => {
+    let pos = 0
+    const appearYear = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const familyFaceId = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const appearProv = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const unknown1 = setVal('ta', index, pos, 4, data[pos++] | data[pos++] << 8 | data[pos++] << 16 | data[pos++] << 24, true, false)
+    const int = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const war = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const chm = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const trust = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const good = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const amb = setVal('ta', index, pos, 1, data[pos++], true, false)
+    // 15 > 신군주... 254로 변경해줌. 255는 무소속
+    const tmp = data[pos++]
+    const rulerNum = setVal('ta', index, pos-1, 1, tmp===15?254:tmp, true, false)
+    const loy = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const off = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const unknown2 = setVal('ta', index, pos, 2, data[pos++] | data[pos++] << 8, true, false)
+    const syn = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const unknown3 = setVal('ta', index, pos, 9, data.slice(pos, pos+9), true, false)
+    pos += 9
+    const born = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const faceMainId = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const faceSubId = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const fullFace = setVal('ta', index, pos-2, 2, (faceMainId.value | faceSubId.value << 8), true, false)
+    const name = setVal('ta', index, pos, 6, decodeName(data.slice(pos, pos+6)), false, false)
+    pos += 6
+    const unknown4 = setVal('ta', index, pos, 2, data[pos++] | data[pos++] << 8, true, false)
+    // total 39*420+6=16,386
+
+    return {
+        appearYear, familyFaceId, appearProv, unknown1, int, war, chm, trust, good, amb,
+        rulerNum, loy, off, unknown2, syn, unknown3, born, faceMainId, faceSubId, fullFace,
+        name, unknown4,
+    }
+}
+
+const parsePersonalData = (index, data) => {
+    let pos = 0
+    const nextOfficerLower = setVal('of', index, pos, 1, data[pos++], true, false)
+    const nextOfficerUpper = setVal('of', index, pos, 1, data[pos++], true, false)
+    /* 행동
+        0x01 : Done / Not Done
+        0x02 : Hidden / Not Hidden
+        0x08 : 구호탄랑에 빠진상태 (다음턴에 독립함)
+        0x10 : 별 떨어진 상태...  다음 해에 죽는다.
+    */
+    const action = setVal('of', index, pos, 1, data[pos++])
+    /* 건강
+        0x01 : 부상당함 (전투에서 회복하려면 3개월 걸린다.)
+        0x02 : 전투중 포로로 잡힘(또는 아플때)
+        0x04, 0x08 : 아프다... 녹색
+        0x40 : 전투중 배신 약속된 상태
+        0x80 : 아이템 받은 상태 (일시적으로 충성도 하락에 면역)
+    */
+    const health = setVal('of', index, pos, 1, data[pos++])
+    const int = setVal('of', index, pos, 1, data[pos++])
+    const war = setVal('of', index, pos, 1, data[pos++])
+    const chm = setVal('of', index, pos, 1, data[pos++])
+    const trust = setVal('of', index, pos, 1, data[pos++])
+    const good = setVal('of', index, pos, 1, data[pos++])
+    const amb = setVal('of', index, pos, 1, data[pos++])
+    // 15 > 신군주... 254로 변경해줌. 255는 무소속
+    let tmp = data[pos++]
+    const rulerNum = setVal('of', index, pos-1, 1, tmp===15?254:tmp)
+    const loyalty = setVal('of', index, pos, 1, data[pos++])
+    const off = setVal('of', index, pos, 1, data[pos++])
+    // 침투... 안했으면 0xff
+    const hide = setVal('of', index, pos, 1, data[pos++])
+    // 모름... 침투 하면 값이 변경되긴 함.
+    const unknown1 = setVal('of', index, pos, 1, data[pos++])
+    const syn = setVal('of', index, pos, 1, data[pos++])
+    tmp = (data[pos++] | data[pos++] << 8)
+    const family = setVal('of', index, pos-2, 2, (tmp===0?tmp:getBaseLog(2, tmp)+1))
+    const army = setVal('of', index, pos, 2, (data[pos++] | data[pos++] << 8))
+    const weapon = setVal('of', index, pos, 2, (data[pos++] | data[pos++] << 8))
+    const train = setVal('of', index, pos, 1, data[pos++])
+    const unknown2 = setVal('of', index, pos, 1, data[pos++])
+    const unknown3 = setVal('of', index, pos, 1, data[pos++])
+    const born = setVal('of', index, pos, 1, data[pos++])
+    const faceMainId = setVal('of', index, pos, 1, data[pos++])
+    const faceSubId = setVal('of', index, pos, 1, data[pos++])
+    const fullFace = setVal('of', index, pos-2, 2, (faceMainId.value | faceSubId.value << 8), true, false)
+    const name = setVal('of', index, pos, 6, decodeName(data.slice(pos, pos+6)), false, true)
+    pos += 6
+    const unknown4 = setVal('of', index, pos, 1, data[pos++])
+    const unknown5 = setVal('of', index, pos, 1, data[pos++])
+
+    const offsetIdx = idxFromOffset(nextOfficerLower.value | nextOfficerUpper.value << 8)
+    const nextOfficer = setVal('of', index, 0, 2, offsetIdx, true, false)
+
+    return {
+        nextOfficer, action, health, int, war, chm, trust, good, amb, rulerNum, loyalty, off,
+        hide, unknown1, syn, family, army, weapon, train, unknown2, unknown3, born,
+        faceMainId, faceSubId, name, unknown4, unknown5, fullFace,
+    }
+}
+
+const parseRulerData = (index, data, officers) => {
+    let pos = 0
+    const ruler = {}
+    const nameOf = (idx, empty) => ((officers.find(e=>e.idx===idx)||{}).name||{}).value || empty
+
+    ruler.rulerPos = setVal('ru', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    ruler.rulerIdx = idxFromOffset(ruler.rulerPos.value)
+    ruler.rulerName = nameOf(ruler.rulerIdx, '')
+
+    ruler.homeTown = setVal('ru', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    ruler.homeIdx = (ruler.homeTown.value - 9930)/35+1
+
+    ruler.advisor = setVal('ru', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    ruler.advisorIdx = idxFromOffset(ruler.advisor.value)
+    ruler.advisorName = nameOf(ruler.advisorIdx, '공석')
+
+    ruler.unknown7 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown8 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown9 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown10 = setVal('ru', index, pos, 1, data[pos++], true, false) // 결혼당하면(?) 값이 바뀜.
+
+    const allianceFirst = setVal('ru', index, pos, 1, data[pos++], true, false)
+    const allianceSecond = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.allianceFirst = allianceFirst
+    ruler.allianceSecond = allianceSecond
+    ruler.alliance = []
+    for (let bit=0; bit<16; bit++) {
+        const byte = bit<8 ? allianceFirst.value : allianceSecond.value
+        ruler.alliance.push(byte & (1 << (bit%8)) ? 1 : 0)
+    }
+
+    ruler.unknown13 = setVal('ru', index, pos, 1, data[pos++], true, false)
+    ruler.unknown14 = setVal('ru', index, pos, 1, data[pos++], true, false)
+
+    ruler.correspond = []
+    for (let i=0; i<16; i++) {
+        ruler[`corr${i+1}`] = setVal('ru', index, pos, 1, data[pos++], true, false)
+        ruler.correspond.push(ruler[`corr${i+1}`].value)
+    }
+
+    for (let i=0; i<11; i++) {
+        // 4번째값은 딸이 있는 경우 255 / 혼인해서 없는 경우 0이 됨. (255로 고치면 계속 혼인 시키는 거 가능)
+        ruler[`unknown${15+i}`] = setVal('ru', index, pos, 1, data[pos++], true, false)
+    }
+
+    return ruler
+}
+
+// 幽州幷州冀州青州兗州司州雍州涼州徐州予州荊州揚州益州交州
+const PROV_NAMES = ['유주(幽州)', '병주(幷州)', '기주(冀州)', '청주(靑州)', '연주(兗州)', '사주(司州)', '옹주(雍州)', '양주(涼州)', '서주(徐州)', '예주(予州)', '형주(荊州)', '양주(揚州)', '익주(益州)', '교주(交州)']
+
+const parseProvinceData = (index, data) => {
+    let pos = 0
+    // 통치자의 다음 도시
+    const nextCity = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    // 태수
+    const gov = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    // 재야장수
+    const freeAgent = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    // 탐색가능한 장수
+    const hideAgent = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8), true, false)
+    const gold = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8))
+    const food = setVal('la', index, pos, 4, (data[pos++] | data[pos++] << 8 | data[pos++] << 16 | data[pos++] << 24) >>> 0)
+    const pop = setVal('la', index, pos, 2, (data[pos++] | data[pos++] << 8))
+    const ruler = setVal('la', index, pos, 1, data[pos++], true, false)
+    const warRuler = setVal('la', index, pos, 1, data[pos++], true, false)
+    // 위임 0: 직할, 4: 전권형, 5: 생산형, 6: 군사형, 7: 인사형
+    const provInfo1 = setVal('la', index, pos, 1, data[pos++], true, false)
+    const provInfo2 = setVal('la', index, pos, 1, data[pos++], true, false)
+    // 군사형위임시 전쟁할 땅
+    const warProvince = setVal('la', index, pos, 1, data[pos++], true, false)
+    // 생산형위임시 돈과쌀 모으는 땅
+    const sendProvince = setVal('la', index, pos, 1, data[pos++], true, false)
+    const land = setVal('la', index, pos, 1, data[pos++])
+    const loy = setVal('la', index, pos, 1, data[pos++])
+    const flood = setVal('la', index, pos, 1, data[pos++])
+    const horse = setVal('la', index, pos, 1, data[pos++])
+    const forts = setVal('la', index, pos, 1, data[pos++])
+    const riceRate = setVal('la', index, pos, 1, data[pos++])
+    const unknown1 = setVal('la', index, pos, 1, data[pos++], true, false)
+    const unknown2 = setVal('la', index, pos, 1, data[pos++], true, false)
+    const unknown3 = setVal('la', index, pos, 1, data[pos++], true, false)
+    const unknown4 = setVal('la', index, pos, 1, data[pos++], true, false)
+    const posX = setVal('la', index, pos, 1, data[pos++], true, false)
+    const posY = setVal('la', index, pos, 1, data[pos++], true, false)
+    const provNo = setVal('la', index, pos, 1, data[pos++], true, false)
+
+    return {
+        nextCity, gov, freeAgent, hideAgent, gold, food, pop, ruler, warRuler, provInfo1,
+        provInfo2, warProvince, sendProvince, land, loy, flood, horse, forts, riceRate,
+        unknown1, unknown2, unknown3, unknown4, posX, posY, provNo,
+        provName: PROV_NAMES[provNo.value],
+    }
+}
+
+const parseTaikiFile = (data) => {
+    let offset = 6
+    const scenarios = []
+    let sum = 0
+    data.slice(0, 6).forEach(e=>{
+        sum += e
+        scenarios.push(sum)
+    })
+
+    let scenarioIdx = 0
+    const length = 39
+    const list = []
+    const totalCount = (data.length-6)/length // 420
+    for (let i=0; i<totalCount; i++) {
+        const taiki = { idx: i+1, ...parseTaikiData(i, data.slice(offset, offset+length)) }
+        offset += length
+
+        if (i===scenarios[scenarioIdx]) {
+            scenarioIdx = scenarioIdx<5 ? scenarioIdx+1 : -1
+        }
+        if (scenarioIdx>-1) {
+            taiki.scenario = scenarioIdx+1
+        }
+        list.push(taiki)
+    }
+    return list
+}
+
+const parseSaveFile = (data) => {
+    const signature = new TextDecoder().decode(data.slice(0, 10))
+    if (signature!=='1990.02.19') {
+        throw new Error('삼국지2 세이브 파일이 아닙니다 (시그니처 불일치)')
+    }
+    if (data.length<LAND_BASE + LAND_SIZE*LAND_COUNT) {
+        throw new Error(`파일 크기가 너무 작습니다 (${data.length} bytes)`)
+    }
+
+    const header = data.slice(0, HEADER_SIZE)
+    const currentYear = header[12] | (header[13] << 8)
+    const currentMonth = header[14]+1
+
+    const officers = []
+    for (let i=0; i<OFFICER_COUNT; i++) {
+        const start = OFFICER_BASE + i*OFFICER_SIZE
+        const officer = parsePersonalData(i, data.slice(start, start+OFFICER_SIZE))
+        if ((officer.action.value===0 || officer.action.value===1) && (officer.health.value===0 || officer.health.value===1) && officer.faceMainId.value>0) {
+            officers.push({ idx: i+1, ...officer })
+        }
+    }
+
+    const rulers = []
+    for (let i=0; i<RULER_COUNT; i++) {
+        const start = RULER_BASE + i*RULER_SIZE
+        rulers.push({ idx: i+1, ...parseRulerData(i, data.slice(start, start+RULER_SIZE), officers) })
+    }
+
+    const lands = []
+    for (let i=0; i<LAND_COUNT; i++) {
+        const start = LAND_BASE + i*LAND_SIZE
+        lands.push({ idx: i+1, ...parseProvinceData(i, data.slice(start, start+LAND_SIZE)) })
+    }
+
+    return { currentYear, currentMonth, officers, rulers, lands }
+}
+
+// ---------------------------------------------------------------------------
+// 저장: 원본 바이트를 복사하고, 값이 바뀐 칸만 덮어쓴다.
+// ---------------------------------------------------------------------------
+const writeField = (out, base, key, field) => {
+    const at = base + field.pos
+    const value = field.value
+    if (key==='name') {
+        const bytes = encodeEucKr(value)
+        for (let i=0; i<field.size; i++) {
+            out[at+i] = bytes[i] || 0
+        }
+    } else if (field.size===1) {
+        out[at] = key==='rulerNum' && value===254 ? 15 : value
+    } else if (field.size===2) {
+        const v = key==='family' ? (value===0 ? 0 : Math.pow(2, value-1)) : value
+        out[at] = v & 0xff
+        out[at+1] = (v>>8) & 0xff
+    } else if (field.size===4) {
+        out[at] = value & 0xff
+        out[at+1] = (value>>8) & 0xff
+        out[at+2] = (value>>16) & 0xff
+        out[at+3] = (value>>24) & 0xff
+    }
+}
+
+const writeRow = (out, base, row) => {
+    Object.keys(row).forEach(k=>{
+        const field = row[k]
+        if (field && typeof field==='object' && 'pos' in field && field.editable && field.value!==field.orig) {
+            writeField(out, base, k, field)
+        }
+    })
+}
+
+const buildSaveFile = (data, officers, lands) => {
+    const out = data.slice()
+    officers.forEach(o=>writeRow(out, OFFICER_BASE + (o.idx-1)*OFFICER_SIZE, o))
+    lands.forEach(l=>writeRow(out, LAND_BASE + (l.idx-1)*LAND_SIZE, l))
+    return out
+}
+
+// ---------------------------------------------------------------------------
+// 얼굴 (KAODATA.DAT / MONTAGE.DAT)
+//   8 color, 3바이트로 8픽셀, green / blue / red 순서. 한 줄을 두 줄로 그린다.
+// ---------------------------------------------------------------------------
+const byteTo8BitArray = (b) => {
+    b = b & 0xff
+    return [b & 0x80, b & 0x40, b & 0x20, b & 0x10, b & 0x8, b & 0x4, b & 0x2, b & 0x1].map(v=>v?1:0)
+}
+
+const colorToArray = (r, g, b) => {
+    switch ((r << 2) | (g << 1) | b) {
+        case 1: return [0xff, 0x50, 0x50]
+        case 2: return [0x50, 0x50, 0xff]
+        case 3: return [0xff, 0x50, 0xff]
+        case 4: return [0x50, 0xf8, 0x50]
+        case 5: return [0xff, 0xf8, 0x50]
+        case 6: return [0x50, 0xf8, 0xff]
+        case 7: return [0xff, 0xf8, 0xff]
+        default: return [0x00, 0x00, 0x00]
+    }
+}
+
+// transparent: 'none' | 'black' (검정만 투명) | 'any' (채널 하나라도 0이면 투명, 원본의 코 처리)
+const drawPlane = (srcByte, out, pixelIndex, width, transparent='none') => {
+    const lineBytes = width*4
+    const max = (3*width/8)
+    for (let i=0; i<srcByte.length; i+=3) {
+        const greenArray = byteTo8BitArray(srcByte[i])
+        const blueArray = byteTo8BitArray(srcByte[i+1])
+        const redArray = byteTo8BitArray(srcByte[i+2])
+
+        for (let j=0; j<8; j++) {
+            const rgb = colorToArray(redArray[j], greenArray[j], blueArray[j])
+            const skip = transparent==='black' ? (rgb[0]===0&&rgb[1]===0&&rgb[2]===0)
+                : transparent==='any' ? (rgb[0]===0||rgb[1]===0||rgb[2]===0)
+                : false
+            if (skip) {
+                pixelIndex += 4
+            } else {
+                for (let c=0; c<3; c++) {
+                    out[pixelIndex] = rgb[c]
+                    out[pixelIndex+lineBytes] = rgb[c]
+                    pixelIndex++
+                }
+                out[pixelIndex] = 0xff
+                out[pixelIndex+lineBytes] = 0xff
+                pixelIndex++
+            }
+        }
+        // i가 max mod로 0이면 새로운 줄이다.
+        if (i>0 && i%max===0) {
+            pixelIndex += lineBytes
+        }
+    }
+}
+
+const getFaceData = (kao, faceId) => {
+    const width = 64
+    const start = (faceId-1)*KAO_FACE_SIZE
+    const out = new Uint8ClampedArray(width*80*4)
+    drawPlane(kao.slice(start, start+KAO_FACE_SIZE), out, 0, width)
+    return out
+}
+
+const getGenericFaceData = (montage, fullFace) => {
+    const width = 64
+    const sd = montage.slice((fullFace&0x07)*MONTAGE_SET_SIZE, ((fullFace&0x07)+1)*MONTAGE_SET_SIZE)
+    const upperType = (fullFace>>3)&0x03
+    const lowerType = (fullFace>>5)&0x03
+    const eyeType = (fullFace>>7)&0x03
+    const noseType = (fullFace>>9)&0x03
+    const mouthType = (fullFace>>11)&0x03
+
+    // 세트 하나 = 윗면 4개 + 아랫면 4개 + 눈 4개 + 입 4개 + 코 4개
+    let byteOffset = 0
+    const part = (lines, type) => {
+        const setBytes = width*lines*4*3/8
+        const typeBytes = setBytes/4
+        const bytes = sd.slice(byteOffset + type*typeBytes, byteOffset + (type+1)*typeBytes)
+        byteOffset += setBytes
+        return bytes
+    }
+    const upperBytes = part(18, upperType)
+    const lowerBytes = part(22, lowerType)
+    const eyeBytes = part(8, eyeType)
+    const mouthBytes = part(10, mouthType)
+    const noseBytes = part(8, noseType)
+
+    const out = new Uint8ClampedArray(width*80*4)
+    const lineBytes = width*4
+    drawPlane([...upperBytes, ...lowerBytes], out, 0, width)
+    drawPlane(eyeBytes, out, lineBytes*20, width, 'black')
+    drawPlane(noseBytes, out, lineBytes*(20+12), width, 'any')
+    drawPlane(mouthBytes, out, lineBytes*(20+12+12), width, 'black')
+    return out
+}
+
+const drawFace = (canvas, faceMainId, faceSubId) => {
+    const ctx = canvas.getContext('2d')
+    let pixels = null
+    if (faceSubId>=0x01 && faceSubId<=0xff) {
+        if (state.montage) pixels = getGenericFaceData(state.montage, faceMainId | faceSubId << 8)
+    } else if (state.kao && faceMainId>=1 && faceMainId<=KAO_FACE_COUNT) {
+        pixels = getFaceData(state.kao, faceMainId)
+    }
+    if (pixels) {
+        ctx.putImageData(new ImageData(pixels, 64, 80), 0, 0)
+    } else {
+        ctx.clearRect(0, 0, 64, 80)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 화면
+// ---------------------------------------------------------------------------
+const state = {
+    saveData: null,
+    fileName: '',
+    currentYear: 0,
+    currentMonth: 0,
+    officers: [],
+    rulers: [],
+    lands: [],
+    kao: null,
+    montage: null,
+    taiki: [],
+    tab: 'officers',
+}
+
+const $ = (id) => document.getElementById(id)
+const esc = (s) => String(s).replace(/[&<>"']/g, c=>({'&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'}[c]))
+const officerByIdx = (idx) => state.officers.find(o=>o.idx===idx)
+const officerName = (idx, empty='-') => (officerByIdx(idx)||{name:{value:empty}}).name.value
+const officerLink = (idx, text) => `<a class="link" data-goto="officer-${idx}">${esc(text)}</a>`
+
+// 칸 정의: { h: 헤더, f: 편집 필드 } 또는 { h, html: row=>문자열 }
+const edit = (h, f) => ({ h, f })
+
+const officerColumns = () => [
+    { h: 'No', html: o=>o.idx },
+    { h: 'Name', f: 'name', prefix: o=>{
+        const prev = state.officers.find(p=>p.nextOfficer.value===o.idx)
+        return prev ? `<a class="link prev" data-goto="officer-${prev.idx}" title="이전: ${esc(prev.name.value)}">◀</a>` : ''
+    } },
+    { h: 'Old', html: o=>state.currentYear - o.born.value + 1 },
+    ...(state.kao || state.montage ? [{ h: 'Face', html: o=>`<canvas width="64" height="80" data-face="${o.idx}"></canvas>` }] : []),
+    edit('Action', 'action'),
+    edit('Health', 'health'),
+    edit('FaceId', 'faceMainId'),
+    edit('INT', 'int'),
+    edit('WAR', 'war'),
+    edit('Charm', 'chm'),
+    edit('Trust', 'trust'),
+    edit('Good', 'good'),
+    edit('Ambitious', 'amb'),
+    edit('Loyalty', 'loyalty'),
+    edit('Office', 'off'),
+    edit('Sync', 'syn'),
+    edit('Army', 'army'),
+    edit('Weapon', 'weapon'),
+    edit('Training', 'train'),
+    { h: 'Ruler Name', html: o=>{
+        const ruler = officerByIdx(o.rulerNum.value+1)
+        if (!ruler) return '무소속'
+        if (ruler.idx===o.idx) return '군주'
+        const rulersRuler = officerByIdx(ruler.rulerNum.value+1)
+        if (!rulersRuler) return '무소속'
+        // 군주는 최상위이므로 군주의 군주는 자기 자신이어야 한다.
+        if (rulersRuler.idx===ruler.idx) return officerLink(ruler.idx, ruler.name.value)
+        return esc(`${ruler.name.value}(이)라고 하는데 군주일듯`)
+    } },
+    { h: '다음', html: o=>{
+        const next = officerByIdx(o.nextOfficer.value)
+        return next ? officerLink(next.idx, next.name.value) : '-'
+    } },
+    edit('Family', 'family'),
+    edit('Ex1', 'unknown1'),
+    edit('Ex2', 'unknown2'),
+    edit('Ex3', 'unknown3'),
+    edit('Ex4', 'unknown4'),
+    edit('Ex5', 'unknown5'),
+]
+
+const rulerColumns = () => {
+    const columns = [
+        { h: 'No', html: r=>r.idx },
+        { h: 'Ruler Name', html: r=>r.rulerIdx ? officerLink(r.rulerIdx, r.rulerName) : esc(r.rulerName) },
+        { h: `Ruler's Prov`, html: r=>esc((state.lands.find(e=>e.idx===r.homeIdx)||{}).provName || '') },
+        { h: 'Advisor', html: r=>esc(r.advisorName) },
+    ]
+    state.rulers.forEach((other, i)=>{
+        columns.push({ h: `${other.rulerName || other.idx}(A)`, html: r=>r.idx===other.idx ? '-' : r.alliance[i] })
+        columns.push({ h: `${other.rulerName || other.idx}(C)`, html: r=>r.idx===other.idx ? '-' : r.correspond[i] })
+    })
+    return columns
+}
+
+const landRuler = (rulerNo) => {
+    if (rulerNo===255) return '-'
+    return esc(officerName(rulerNo===15 ? 255 : rulerNo+1))
+}
+
+const landAgent = (offset, empty) => {
+    if (!(offset>0)) return '-'
+    const officer = officerByIdx(idxFromOffset(offset))
+    return officer ? officerLink(officer.idx, officer.name.value) : empty
+}
+
+const landColumns = () => [
+    { h: 'No', html: l=>l.idx },
+    { h: 'Province Name', html: l=>esc(`${l.provName}(${l.idx})`) },
+    { h: 'Goverment', html: l=>landAgent(l.gov.value, '-') },
+    edit('Gold', 'gold'),
+    edit('Food', 'food'),
+    edit('Population', 'pop'),
+    { h: 'Ruler', html: l=>landRuler(l.ruler.value) },
+    { h: 'Ruler In WAR', html: l=>landRuler(l.warRuler.value) },
+    { h: 'Province Info 1', html: l=>(l.provInfo1.value&0x80) ? '턴종료' : '' },
+    { h: 'Province Info 2', html: l=>`${l.provInfo2.value}${(l.provInfo2.value&0x01) ? ' (상인상시거주)' : ''}` },
+    edit('Province In WAR', 'warProvince'),
+    edit('Province Tribute', 'sendProvince'),
+    edit('Land Develop', 'land'),
+    edit('Flood Control', 'flood'),
+    edit('Loyalty', 'loy'),
+    edit('Horse', 'horse'),
+    edit('Fortress', 'forts'),
+    edit('Rice Rate', 'riceRate'),
+    edit('PosX', 'posX'),
+    edit('PosY', 'posY'),
+    edit('Ex1', 'unknown1'),
+    edit('Ex2', 'unknown2'),
+    edit('Ex3', 'unknown3'),
+    edit('Ex4', 'unknown4'),
+    { h: 'Free Agent', html: l=>landAgent(l.freeAgent.value, 'Wrong Data') },
+    { h: 'Hide Agent', html: l=>landAgent(l.hideAgent.value, 'Wrong Data') },
+    { h: 'Next City', html: l=>{
+        if (!(l.nextCity.value>0)) return '-'
+        const next = state.lands[(l.nextCity.value-9895)/35-1]
+        return next ? esc(`${next.provName}(${next.idx})`) : '-'
+    } },
+]
+
+const taikiColumns = () => [
+    { h: 'No', html: t=>t.idx },
+    { h: 'Name(Scenario)', html: t=>esc(t.name.value || '-') + (t.scenario ? `(${t.scenario})` : '') },
+    ...(state.kao || state.montage ? [{ h: 'Face', html: t=>`<canvas width="64" height="80" data-face="t${t.idx}"></canvas>` }] : []),
+    { h: 'FaceId', html: t=>t.faceSubId.value>0 ? `${t.faceMainId.value}/${t.faceSubId.value}` : t.faceMainId.value },
+    { h: 'Family', html: t=>t.familyFaceId.value===255 ? '-' : t.familyFaceId.value },
+    { h: 'SYN', html: t=>t.syn.value },
+    { h: 'Born', html: t=>t.born.value+1 || '-' },
+    { h: 'Appear Year', html: t=>t.appearYear.value+1 || '-' },
+    { h: 'Appear Province', html: t=>t.appearProv.value+1 || '' },
+    { h: 'INT', html: t=>t.int.value || '' },
+    { h: 'WAR', html: t=>t.war.value || '' },
+    { h: 'CHM', html: t=>t.chm.value || '' },
+    { h: 'TRUST', html: t=>t.trust.value || '' },
+    { h: 'GOOD', html: t=>t.good.value || '' },
+    { h: 'AMB', html: t=>t.amb.value || '' },
+]
+
+const TABS = {
+    officers: { label: 'Officers', ready: ()=>!!state.saveData, rows: ()=>state.officers, columns: officerColumns, rowId: o=>`officer-${o.idx}` },
+    rulers: { label: 'Rulers', ready: ()=>!!state.saveData, rows: ()=>state.rulers, columns: rulerColumns },
+    lands: { label: 'Lands', ready: ()=>!!state.saveData, rows: ()=>state.lands, columns: landColumns },
+    taiki: { label: 'Taiki', ready: ()=>state.taiki.length>0, rows: ()=>state.taiki, columns: taikiColumns },
+    faces: { label: 'Faces', ready: ()=>!!state.kao },
+}
+
+const cellHtml = (col, row, r, c) => {
+    if (!col.f) {
+        return `<td class="${c<2 ? `fix${c+1}` : ''}">${col.html(row)}</td>`
+    }
+    const field = row[col.f]
+    const classes = [c<2 ? `fix${c+1}` : '']
+    if (field.editable) classes.push('edit')
+    if (field.value!==field.orig) classes.push('changed')
+    const prefix = col.prefix ? col.prefix(row) : ''
+    return `<td class="${classes.join(' ')}" data-r="${r}" data-f="${col.f}">${prefix}<span>${esc(field.value)}</span></td>`
+}
+
+const renderTable = (tab) => {
+    const def = TABS[tab]
+    const rows = def.rows()
+    const columns = def.columns()
+    const head = columns.map((col, c)=>`<th class="${c<2 ? `fix${c+1}` : ''}">${esc(col.h)}</th>`).join('')
+    const body = rows.map((row, r)=>{
+        const id = def.rowId ? ` id="${def.rowId(row)}"` : ''
+        return `<tr${id}>${columns.map((col, c)=>cellHtml(col, row, r, c)).join('')}</tr>`
+    }).join('')
+    $('view').innerHTML = `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+
+    $('view').querySelectorAll('canvas[data-face]').forEach(canvas=>{
+        const key = canvas.dataset.face
+        const row = key[0]==='t' ? state.taiki[Number(key.slice(1))-1] : officerByIdx(Number(key))
+        drawFace(canvas, row.faceMainId.value, row.faceSubId.value)
+    })
+}
+
+const renderFaces = () => {
+    const perLine = 20
+    const lines = Math.ceil(KAO_FACE_COUNT/perLine)
+    $('view').innerHTML = `<div class="faces"><canvas id="allFaces" width="${64*perLine}" height="${80*lines}"></canvas></div>`
+    const ctx = $('allFaces').getContext('2d')
+    for (let i=1; i<=KAO_FACE_COUNT; i++) {
+        ctx.putImageData(new ImageData(getFaceData(state.kao, i), 64, 80), ((i-1)%perLine)*64, Math.floor((i-1)/perLine)*80)
+    }
+}
+
+const renderEmpty = () => {
+    $('view').innerHTML = `<div class="empty">
+        <p>파일을 불러오면 여기에 표시됩니다.</p>
+        <ul>
+            <li><b>세이브 파일 열기</b>: 삼국지2 한글판 세이브 파일 (장수 · 군주 · 지역 수정 후 저장)</li>
+            <li><b>게임 리소스 열기</b>: KAODATA.DAT (얼굴), MONTAGE.DAT (합성 얼굴), TAIKI.DAT (등장 장수 목록) — 여러 개를 한 번에 선택할 수 있습니다</li>
+        </ul>
+    </div>`
+}
+
+const render = () => {
+    const available = Object.keys(TABS).filter(k=>TABS[k].ready())
+    if (!available.includes(state.tab)) state.tab = available[0]
+
+    $('tabs').innerHTML = available.map(k=>`<button data-tab="${k}" class="${k===state.tab ? 'active' : ''}">${TABS[k].label}</button>`).join('')
+    $('reloadBtn').disabled = !state.saveData
+    $('saveBtn').disabled = !state.saveData
+    $('gameDate').textContent = state.saveData ? `${state.currentYear}년 ${state.currentMonth}월` : ''
+
+    if (!state.tab) renderEmpty()
+    else if (state.tab==='faces') renderFaces()
+    else renderTable(state.tab)
+}
+
+// ---------------------------------------------------------------------------
+// 편집
+// ---------------------------------------------------------------------------
+const maxOf = (key, field) => {
+    if (LIMITS[key]!==undefined) return LIMITS[key]
+    if (key==='family') return 16
+    return Math.pow(2, 8*field.size) - 1
+}
+
+const validate = (key, field, text) => {
+    if (key==='name') {
+        const bytes = encodeEucKr(text)
+        if (bytes.length>field.size) throw new Error(`이름은 ${field.size}바이트(한글 ${field.size/2}자)까지입니다`)
+        return text
+    }
+    if (!/^\d+$/.test(text.trim())) throw new Error('0 이상의 정수를 입력하세요')
+    const value = Number(text)
+    const max = maxOf(key, field)
+    if (value>max) throw new Error(`최댓값은 ${max}입니다`)
+    return value
+}
+
+const startEdit = (td) => {
+    if (td.querySelector('input')) return
+    const row = TABS[state.tab].rows()[Number(td.dataset.r)]
+    const key = td.dataset.f
+    const field = row[key]
+    const span = td.querySelector('span')
+    const input = document.createElement('input')
+    input.type = field.isNum ? 'number' : 'text'
+    input.value = field.value
+    span.replaceWith(input)
+    input.focus()
+    input.select()
+
+    let done = false
+    const finish = (commit) => {
+        if (done) return
+        if (commit) {
+            try {
+                field.value = validate(key, field, input.value)
+            } catch (e) {
+                input.classList.add('invalid')
+                input.title = e.message
+                alert(e.message)
+                input.focus()
+                return
+            }
+        }
+        done = true
+        if (key==='faceMainId' || key==='faceSubId') {
+            row.fullFace.value = row.faceMainId.value | row.faceSubId.value << 8
+        }
+        renderTable(state.tab)
+    }
+    input.addEventListener('keydown', e=>{
+        if (e.key==='Enter') finish(true)
+        if (e.key==='Escape') finish(false)
+    })
+    input.addEventListener('blur', ()=>finish(true))
+}
+
+$('view').addEventListener('click', e=>{
+    const link = e.target.closest('[data-goto]')
+    if (link) {
+        e.preventDefault()
+        const target = document.getElementById(link.dataset.goto)
+        if (!target && link.dataset.goto.startsWith('officer-') && state.tab!=='officers') {
+            state.tab = 'officers'
+            render()
+        }
+        const el = document.getElementById(link.dataset.goto)
+        if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            el.classList.remove('flash')
+            void el.offsetWidth
+            el.classList.add('flash')
+        }
+        return
+    }
+    const td = e.target.closest('td.edit')
+    if (td) startEdit(td)
+})
+
+$('tabs').addEventListener('click', e=>{
+    const button = e.target.closest('[data-tab]')
+    if (button) {
+        state.tab = button.dataset.tab
+        render()
+    }
+})
+
+// ---------------------------------------------------------------------------
+// 파일
+// ---------------------------------------------------------------------------
+const readFile = (file) => file.arrayBuffer().then(buf=>new Uint8Array(buf))
+
+const loadSave = (bytes) => {
+    const parsed = parseSaveFile(bytes)
+    state.saveData = bytes
+    Object.assign(state, parsed)
+    if (!['officers', 'rulers', 'lands'].includes(state.tab)) state.tab = 'officers'
+    render()
+}
+
+const hasChanges = () => [...state.officers, ...state.lands].some(row=>
+    Object.values(row).some(f=>f && typeof f==='object' && 'orig' in f && f.value!==f.orig))
+
+$('saveInput').addEventListener('change', async e=>{
+    const file = e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    if (state.saveData && hasChanges() && !confirm('저장하지 않은 수정 내용이 있습니다. 새 파일을 열까요?')) return
+    try {
+        loadSave(await readFile(file))
+        state.fileName = file.name
+        $('fileName').textContent = `${file.name} (${state.saveData.length.toLocaleString()} bytes)`
+    } catch (err) {
+        alert(err.message)
+    }
+})
+
+$('reloadBtn').addEventListener('click', ()=>{
+    if (hasChanges() && !confirm('수정한 내용을 버리고 다시 읽을까요?')) return
+    loadSave(state.saveData)
+})
+
+$('saveBtn').addEventListener('click', ()=>{
+    let bytes
+    try {
+        bytes = buildSaveFile(state.saveData, state.officers, state.lands)
+    } catch (err) {
+        alert(err.message)
+        return
+    }
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = state.fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(()=>URL.revokeObjectURL(url), 1000)
+    // 저장한 내용을 새 기준으로 삼는다.
+    loadSave(bytes)
+})
+
+const RESOURCES = [
+    { key: 'kao', name: 'KAODATA', label: '얼굴' },
+    { key: 'montage', name: 'MONTAGE', label: '합성 얼굴' },
+    { key: 'taiki', name: 'TAIKI', label: '등장 장수' },
+]
+
+const setResource = (key, bytes) => {
+    if (key==='taiki') state.taiki = parseTaikiFile(bytes)
+    else state[key] = bytes
+}
+
+const updateResStatus = () => {
+    $('resStatus').textContent = RESOURCES.map(r=>{
+        const ok = r.key==='taiki' ? state.taiki.length>0 : !!state[r.key]
+        return `${r.label} ${ok ? '✓' : '–'}`
+    }).join(' · ')
+}
+
+$('resInput').addEventListener('change', async e=>{
+    const files = [...e.target.files]
+    e.target.value = ''
+    const unknown = []
+    for (const file of files) {
+        const res = RESOURCES.find(r=>file.name.toUpperCase().includes(r.name))
+        if (!res) {
+            unknown.push(file.name)
+            continue
+        }
+        setResource(res.key, await readFile(file))
+    }
+    if (unknown.length) alert(`알 수 없는 파일은 건너뛰었습니다: ${unknown.join(', ')}`)
+    updateResStatus()
+    render()
+})
+
+// 웹 서버로 열었다면 같은 폴더의 리소스를 자동으로 읽어 본다 (file:// 에서는 조용히 넘어간다).
+const autoLoadResources = async () => {
+    if (!location.protocol.startsWith('http')) return
+    for (const r of RESOURCES) {
+        try {
+            const res = await fetch(`${r.name}.DAT`)
+            if (res.ok) setResource(r.key, new Uint8Array(await res.arrayBuffer()))
+        } catch (e) {
+            // 없으면 수동으로 연다.
+        }
+    }
+    updateResStatus()
+    render()
+}
+
+updateResStatus()
+render()
+autoLoadResources()
+</script>
+</body>
+</html>
