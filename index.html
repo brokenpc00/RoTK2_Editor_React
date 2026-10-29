@@ -108,6 +108,7 @@
     <span class="spacer"></span>
     <label class="btn" title="KAODATA.DAT, MONTAGE.DAT, TAIKI.DAT를 한 번에 선택할 수 있습니다">게임 리소스 열기<input type="file" id="resInput" multiple hidden></label>
     <span id="resStatus" class="muted"></span>
+    <button id="taikiSaveBtn" disabled title="Taiki 탭에서 수정한 내용을 TAIKI.DAT로 저장합니다">TAIKI 저장</button>
 </header>
 <nav id="tabs"></nav>
 <main id="view"></main>
@@ -128,6 +129,10 @@ const LAND_COUNT = 41
 const OFFICER_BASE = HEADER_SIZE
 const RULER_BASE = OFFICER_BASE + OFFICER_SIZE * OFFICER_COUNT + DUMMY1_SIZE
 const LAND_BASE = RULER_BASE + RULER_SIZE * RULER_COUNT
+
+// TAIKI.DAT: 시나리오별 등장 장수 수(6) + taiki(39*420)
+const TAIKI_HEADER_SIZE = 6
+const TAIKI_SIZE = 39
 
 const KAO_FACE_SIZE = 960
 const KAO_FACE_COUNT = 219
@@ -190,32 +195,32 @@ const encodeEucKr = (str) => {
 // ---------------------------------------------------------------------------
 const parseTaikiData = (index, data) => {
     let pos = 0
-    const appearYear = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const familyFaceId = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const appearProv = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const unknown1 = setVal('ta', index, pos, 4, data[pos++] | data[pos++] << 8 | data[pos++] << 16 | data[pos++] << 24, true, false)
-    const int = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const war = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const chm = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const trust = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const good = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const amb = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const appearYear = setVal('ta', index, pos, 1, data[pos++])
+    const familyFaceId = setVal('ta', index, pos, 1, data[pos++])
+    const appearProv = setVal('ta', index, pos, 1, data[pos++])
+    const unknown1 = setVal('ta', index, pos, 4, (data[pos++] | data[pos++] << 8 | data[pos++] << 16 | data[pos++] << 24) >>> 0)
+    const int = setVal('ta', index, pos, 1, data[pos++])
+    const war = setVal('ta', index, pos, 1, data[pos++])
+    const chm = setVal('ta', index, pos, 1, data[pos++])
+    const trust = setVal('ta', index, pos, 1, data[pos++])
+    const good = setVal('ta', index, pos, 1, data[pos++])
+    const amb = setVal('ta', index, pos, 1, data[pos++])
     // 15 > 신군주... 254로 변경해줌. 255는 무소속
     const tmp = data[pos++]
-    const rulerNum = setVal('ta', index, pos-1, 1, tmp===15?254:tmp, true, false)
-    const loy = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const off = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const unknown2 = setVal('ta', index, pos, 2, data[pos++] | data[pos++] << 8, true, false)
-    const syn = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const rulerNum = setVal('ta', index, pos-1, 1, tmp===15?254:tmp)
+    const loy = setVal('ta', index, pos, 1, data[pos++])
+    const off = setVal('ta', index, pos, 1, data[pos++])
+    const unknown2 = setVal('ta', index, pos, 2, data[pos++] | data[pos++] << 8)
+    const syn = setVal('ta', index, pos, 1, data[pos++])
     const unknown3 = setVal('ta', index, pos, 9, data.slice(pos, pos+9), true, false)
     pos += 9
-    const born = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const faceMainId = setVal('ta', index, pos, 1, data[pos++], true, false)
-    const faceSubId = setVal('ta', index, pos, 1, data[pos++], true, false)
+    const born = setVal('ta', index, pos, 1, data[pos++])
+    const faceMainId = setVal('ta', index, pos, 1, data[pos++])
+    const faceSubId = setVal('ta', index, pos, 1, data[pos++])
     const fullFace = setVal('ta', index, pos-2, 2, (faceMainId.value | faceSubId.value << 8), true, false)
-    const name = setVal('ta', index, pos, 6, decodeName(data.slice(pos, pos+6)), false, false)
+    const name = setVal('ta', index, pos, 6, decodeName(data.slice(pos, pos+6)), false, true)
     pos += 6
-    const unknown4 = setVal('ta', index, pos, 2, data[pos++] | data[pos++] << 8, true, false)
+    const unknown4 = setVal('ta', index, pos, 2, data[pos++] | data[pos++] << 8)
     // total 39*420+6=16,386
 
     return {
@@ -382,18 +387,21 @@ const parseProvinceData = (index, data) => {
 }
 
 const parseTaikiFile = (data) => {
-    let offset = 6
+    if (data.length<TAIKI_HEADER_SIZE || (data.length-TAIKI_HEADER_SIZE)%TAIKI_SIZE!==0) {
+        throw new Error(`TAIKI.DAT 크기가 맞지 않습니다 (${data.length} bytes)`)
+    }
+    let offset = TAIKI_HEADER_SIZE
     const scenarios = []
     let sum = 0
-    data.slice(0, 6).forEach(e=>{
+    data.slice(0, TAIKI_HEADER_SIZE).forEach(e=>{
         sum += e
         scenarios.push(sum)
     })
 
     let scenarioIdx = 0
-    const length = 39
+    const length = TAIKI_SIZE
     const list = []
-    const totalCount = (data.length-6)/length // 420
+    const totalCount = (data.length-TAIKI_HEADER_SIZE)/length // 420
     for (let i=0; i<totalCount; i++) {
         const taiki = { idx: i+1, ...parseTaikiData(i, data.slice(offset, offset+length)) }
         offset += length
@@ -484,6 +492,12 @@ const buildSaveFile = (data, officers, lands) => {
     const out = data.slice()
     officers.forEach(o=>writeRow(out, OFFICER_BASE + (o.idx-1)*OFFICER_SIZE, o))
     lands.forEach(l=>writeRow(out, LAND_BASE + (l.idx-1)*LAND_SIZE, l))
+    return out
+}
+
+const buildTaikiFile = (data, taiki) => {
+    const out = data.slice()
+    taiki.forEach(t=>writeRow(out, TAIKI_HEADER_SIZE + (t.idx-1)*TAIKI_SIZE, t))
     return out
 }
 
@@ -612,6 +626,8 @@ const state = {
     lands: [],
     kao: null,
     montage: null,
+    taikiData: null,
+    taikiFileName: 'TAIKI.DAT',
     taiki: [],
     tab: 'officers',
 }
@@ -622,8 +638,8 @@ const officerByIdx = (idx) => state.officers.find(o=>o.idx===idx)
 const officerName = (idx, empty='-') => (officerByIdx(idx)||{name:{value:empty}}).name.value
 const officerLink = (idx, text) => `<a class="link" data-goto="officer-${idx}">${esc(text)}</a>`
 
-// 칸 정의: { h: 헤더, f: 편집 필드 } 또는 { h, html: row=>문자열 }
-const edit = (h, f) => ({ h, f })
+// 칸 정의: { h: 헤더, f: 편집 필드, offset: 화면에 더해 보여줄 값 } 또는 { h, html: row=>문자열 }
+const edit = (h, f, offset=0) => ({ h, f, offset })
 
 const officerColumns = () => [
     { h: 'No', html: o=>o.idx },
@@ -731,20 +747,28 @@ const landColumns = () => [
 
 const taikiColumns = () => [
     { h: 'No', html: t=>t.idx },
-    { h: 'Name(Scenario)', html: t=>esc(t.name.value || '-') + (t.scenario ? `(${t.scenario})` : '') },
+    { h: 'Name(Scenario)', f: 'name', suffix: t=>t.scenario ? `(${t.scenario})` : '' },
     ...(state.kao || state.montage ? [{ h: 'Face', html: t=>`<canvas width="64" height="80" data-face="t${t.idx}"></canvas>` }] : []),
-    { h: 'FaceId', html: t=>t.faceSubId.value>0 ? `${t.faceMainId.value}/${t.faceSubId.value}` : t.faceMainId.value },
-    { h: 'Family', html: t=>t.familyFaceId.value===255 ? '-' : t.familyFaceId.value },
-    { h: 'SYN', html: t=>t.syn.value },
-    { h: 'Born', html: t=>t.born.value+1 || '-' },
-    { h: 'Appear Year', html: t=>t.appearYear.value+1 || '-' },
-    { h: 'Appear Province', html: t=>t.appearProv.value+1 || '' },
-    { h: 'INT', html: t=>t.int.value || '' },
-    { h: 'WAR', html: t=>t.war.value || '' },
-    { h: 'CHM', html: t=>t.chm.value || '' },
-    { h: 'TRUST', html: t=>t.trust.value || '' },
-    { h: 'GOOD', html: t=>t.good.value || '' },
-    { h: 'AMB', html: t=>t.amb.value || '' },
+    edit('FaceId', 'faceMainId'),
+    edit('FaceSub', 'faceSubId'),
+    edit('Family(255=-)', 'familyFaceId'),
+    edit('SYN', 'syn'),
+    edit('Born', 'born', 1),
+    edit('Appear Year', 'appearYear', 1),
+    edit('Appear Province', 'appearProv', 1),
+    edit('INT', 'int'),
+    edit('WAR', 'war'),
+    edit('CHM', 'chm'),
+    edit('TRUST', 'trust'),
+    edit('GOOD', 'good'),
+    edit('AMB', 'amb'),
+    edit('Ruler', 'rulerNum'),
+    edit('Loyalty', 'loy'),
+    edit('Office', 'off'),
+    edit('Ex1', 'unknown1'),
+    edit('Ex2', 'unknown2'),
+    { h: 'Ex3', html: t=>[...t.unknown3.value].join(' ') },
+    edit('Ex4', 'unknown4'),
 ]
 
 const TABS = {
@@ -764,7 +788,10 @@ const cellHtml = (col, row, r, c) => {
     if (field.editable) classes.push('edit')
     if (field.value!==field.orig) classes.push('changed')
     const prefix = col.prefix ? col.prefix(row) : ''
-    return `<td class="${classes.join(' ')}" data-r="${r}" data-f="${col.f}">${prefix}<span>${esc(field.value)}</span></td>`
+    const suffix = col.suffix ? col.suffix(row) : ''
+    const offset = col.offset || 0
+    const shown = offset ? field.value+offset : field.value
+    return `<td class="${classes.join(' ')}" data-r="${r}" data-f="${col.f}" data-o="${offset}">${prefix}<span>${esc(shown)}</span>${suffix}</td>`
 }
 
 const renderTable = (tab) => {
@@ -801,6 +828,7 @@ const renderEmpty = () => {
         <ul>
             <li><b>세이브 파일 열기</b>: 삼국지2 한글판 세이브 파일 (장수 · 군주 · 지역 수정 후 저장)</li>
             <li><b>게임 리소스 열기</b>: KAODATA.DAT (얼굴), MONTAGE.DAT (합성 얼굴), TAIKI.DAT (등장 장수 목록) — 여러 개를 한 번에 선택할 수 있습니다</li>
+            <li><b>TAIKI 저장</b>: Taiki 탭에서 수정한 등장 장수 목록을 TAIKI.DAT로 저장 (Born · Appear Year · Appear Province는 화면에 1을 더해 보여줍니다)</li>
         </ul>
     </div>`
 }
@@ -812,6 +840,7 @@ const render = () => {
     $('tabs').innerHTML = available.map(k=>`<button data-tab="${k}" class="${k===state.tab ? 'active' : ''}">${TABS[k].label}</button>`).join('')
     $('reloadBtn').disabled = !state.saveData
     $('saveBtn').disabled = !state.saveData
+    $('taikiSaveBtn').disabled = !state.taikiData
     $('gameDate').textContent = state.saveData ? `${state.currentYear}년 ${state.currentMonth}월` : ''
 
     if (!state.tab) renderEmpty()
@@ -828,16 +857,18 @@ const maxOf = (key, field) => {
     return Math.pow(2, 8*field.size) - 1
 }
 
-const validate = (key, field, text) => {
+// offset: 화면 값 = 저장 값 + offset (예: 등장 연도는 1을 더해 보여준다)
+const validate = (key, field, text, offset=0) => {
     if (key==='name') {
         const bytes = encodeEucKr(text)
         if (bytes.length>field.size) throw new Error(`이름은 ${field.size}바이트(한글 ${field.size/2}자)까지입니다`)
         return text
     }
-    if (!/^\d+$/.test(text.trim())) throw new Error('0 이상의 정수를 입력하세요')
-    const value = Number(text)
+    if (!/^\d+$/.test(text.trim())) throw new Error(`${offset} 이상의 정수를 입력하세요`)
+    const value = Number(text) - offset
     const max = maxOf(key, field)
-    if (value>max) throw new Error(`최댓값은 ${max}입니다`)
+    if (value<0) throw new Error(`최솟값은 ${offset}입니다`)
+    if (value>max) throw new Error(`최댓값은 ${max+offset}입니다`)
     return value
 }
 
@@ -846,10 +877,11 @@ const startEdit = (td) => {
     const row = TABS[state.tab].rows()[Number(td.dataset.r)]
     const key = td.dataset.f
     const field = row[key]
+    const offset = Number(td.dataset.o || 0)
     const span = td.querySelector('span')
     const input = document.createElement('input')
     input.type = field.isNum ? 'number' : 'text'
-    input.value = field.value
+    input.value = offset ? field.value+offset : field.value
     span.replaceWith(input)
     input.focus()
     input.select()
@@ -859,7 +891,7 @@ const startEdit = (td) => {
         if (done) return
         if (commit) {
             try {
-                field.value = validate(key, field, input.value)
+                field.value = validate(key, field, input.value, offset)
             } catch (e) {
                 input.classList.add('invalid')
                 input.title = e.message
@@ -924,8 +956,19 @@ const loadSave = (bytes) => {
     render()
 }
 
-const hasChanges = () => [...state.officers, ...state.lands].some(row=>
+const hasChanges = (rows=[...state.officers, ...state.lands]) => rows.some(row=>
     Object.values(row).some(f=>f && typeof f==='object' && 'orig' in f && f.value!==f.orig))
+
+const download = (bytes, fileName) => {
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = fileName
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(()=>URL.revokeObjectURL(url), 1000)
+}
 
 $('saveInput').addEventListener('change', async e=>{
     const file = e.target.files[0]
@@ -954,16 +997,22 @@ $('saveBtn').addEventListener('click', ()=>{
         alert(err.message)
         return
     }
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'application/octet-stream' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = state.fileName
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    setTimeout(()=>URL.revokeObjectURL(url), 1000)
+    download(bytes, state.fileName)
     // 저장한 내용을 새 기준으로 삼는다.
     loadSave(bytes)
+})
+
+$('taikiSaveBtn').addEventListener('click', ()=>{
+    let bytes
+    try {
+        bytes = buildTaikiFile(state.taikiData, state.taiki)
+    } catch (err) {
+        alert(err.message)
+        return
+    }
+    download(bytes, state.taikiFileName)
+    setResource('taiki', bytes)
+    render()
 })
 
 const RESOURCES = [
@@ -972,9 +1021,14 @@ const RESOURCES = [
     { key: 'taiki', name: 'TAIKI', label: '등장 장수' },
 ]
 
-const setResource = (key, bytes) => {
-    if (key==='taiki') state.taiki = parseTaikiFile(bytes)
-    else state[key] = bytes
+const setResource = (key, bytes, fileName) => {
+    if (key==='taiki') {
+        state.taiki = parseTaikiFile(bytes)
+        state.taikiData = bytes
+        if (fileName) state.taikiFileName = fileName
+    } else {
+        state[key] = bytes
+    }
 }
 
 const updateResStatus = () => {
@@ -994,7 +1048,12 @@ $('resInput').addEventListener('change', async e=>{
             unknown.push(file.name)
             continue
         }
-        setResource(res.key, await readFile(file))
+        if (res.key==='taiki' && hasChanges(state.taiki) && !confirm('TAIKI에 저장하지 않은 수정 내용이 있습니다. 새 파일을 열까요?')) continue
+        try {
+            setResource(res.key, await readFile(file), file.name)
+        } catch (err) {
+            alert(err.message)
+        }
     }
     if (unknown.length) alert(`알 수 없는 파일은 건너뛰었습니다: ${unknown.join(', ')}`)
     updateResStatus()
