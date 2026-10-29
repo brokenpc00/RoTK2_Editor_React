@@ -11,7 +11,7 @@
 RoTK2 (DOS) Editor — a single plain HTML file, no build step.
 
 
-**▶ [에디터 바로 열기 (Open the editor)](https://raw.githack.com/brokenpc00/RoTK2_Editor_React/main/index.html)**
+**▶ [에디터 바로 열기 (Open the editor)](https://htmlpreview.github.io/?https://github.com/brokenpc00/RoTK2_Editor_React/blob/main/index.html)**
 
 파일은 브라우저 안에서만 읽고 저장하며 어디에도 올라가지 않습니다.
 
