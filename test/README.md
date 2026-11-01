@@ -1,0 +1,19 @@
+# 테스트
+
+앱은 계속 `index.html` 한 파일로 실행하며 테스트 의존성은 개발할 때만 사용한다.
+
+Node.js 26.x와 pnpm 11.25.0에서:
+
+```sh
+pnpm install
+pnpm exec playwright install chromium
+pnpm test
+```
+
+- `pnpm test` / `npm test`: Jest 단위 테스트와 Playwright UI 테스트 전체.
+- `pnpm run test:unit` / `npm run test:unit`: Jest만 실행.
+- `pnpm run test:ui` / `npm run test:ui`: Playwright만 실행.
+
+UI 테스트는 `127.0.0.1:8764`에 격리 서버를 자동으로 시작하고 종료한다. 이 포트가 비어 있어야 한다. 실제 게임 파일 대신 합성 세이브·리소스를 사용한다.
+
+키보드 이동·편집·취소, 스크롤·포커스 유지, 정렬 방향, 정렬 후 실제 다운로드 바이트, 얼굴 표시, Lands·Taiki의 공통 편집과 저장을 확인한다. 실패 화면은 `test/.results/`에 남는다.

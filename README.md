@@ -29,10 +29,12 @@ RoTK2 (DOS) Editor — a single plain HTML file, no build step.
    - `KAODATA.DAT`: 장수 얼굴 (Face 칸, Faces 탭)
    - `MONTAGE.DAT`: 합성 얼굴 (일반 장수)
    - `TAIKI.DAT`: 등장 장수 목록 (Taiki 탭)
-4. 칸을 눌러 값을 고칩니다. Enter로 확정, Esc로 취소합니다. 바뀐 칸은 노란색으로 표시됩니다.
+4. 칸을 한 번 누르면 파란 테두리로 선택됩니다. 방향키로 셀을 이동하고, Enter 또는 더블클릭으로 편집합니다. 편집 중에는 방향키가 다른 셀로 이동하지 않습니다. 다시 Enter로 확정, Esc로 취소합니다. 바뀐 칸은 노란색으로 표시됩니다.
 5. **저장**으로 세이브 파일을, **TAIKI 저장**으로 `TAIKI.DAT`를 내려받습니다. 게임 폴더에 덮어쓰기 전에 원본은 백업해 두세요.
 
 웹 서버로 열면 (예: 게임 폴더에서 `python3 -m http.server`) 같은 폴더의 `.DAT` 파일을 자동으로 읽습니다.
+
+Officers의 Name, INT, WAR, Charm, Loyalty, Sync, Family 등 열 제목을 누르면 오름차순·내림차순으로 정렬합니다. **No**로 번호순으로 돌아갈 수 있습니다. 정렬은 화면에만 적용하며, 저장 파일의 장수 순서와 바이트 위치는 유지됩니다.
 
 
 ## 수정할 수 있는 항목

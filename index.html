@@ -83,7 +83,10 @@
     th.fix1, th.fix2 { z-index: 3; }
     td.edit { cursor: pointer; }
     td.edit:hover { outline: 1px dashed var(--accent); outline-offset: -2px; }
+    td[tabindex]:focus, td.edit:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
     td.changed { background: var(--changed); }
+    .sort-button { border: 0; border-radius: 0; padding: 0; color: inherit; font-weight: inherit; }
+    .sort-button:hover { color: var(--accent); }
     td input { width: 80px; font: inherit; padding: 2px 4px; }
     td input.invalid { border-color: var(--error); outline: 1px solid var(--error); }
     td canvas { display: block; image-rendering: pixelated; }
@@ -630,6 +633,8 @@ const state = {
     taikiFileName: 'TAIKI.DAT',
     taiki: [],
     tab: 'officers',
+    tableFocus: {},
+    officerSort: { key: 'idx', direction: 1 },
 }
 
 const $ = (id) => document.getElementById(id)
@@ -642,7 +647,7 @@ const officerLink = (idx, text) => `<a class="link" data-goto="officer-${idx}">$
 const edit = (h, f, offset=0) => ({ h, f, offset })
 
 const officerColumns = () => [
-    { h: 'No', html: o=>o.idx },
+    { h: 'No', sort: 'idx', html: o=>o.idx },
     { h: 'Name', f: 'name', prefix: o=>{
         const prev = state.officers.find(p=>p.nextOfficer.value===o.idx)
         return prev ? `<a class="link prev" data-goto="officer-${prev.idx}" title="이전: ${esc(prev.name.value)}">◀</a>` : ''
@@ -780,8 +785,10 @@ const TABS = {
 }
 
 const cellHtml = (col, row, r, c) => {
+    const focus = state.tableFocus[state.tab]
+    const attrs = `role="gridcell" data-r="${r}" data-c="${c}" tabindex="${focus.row===r && focus.column===c ? 0 : -1}"`
     if (!col.f) {
-        return `<td class="${c<2 ? `fix${c+1}` : ''}">${col.html(row)}</td>`
+        return `<td ${attrs} class="${c<2 ? `fix${c+1}` : ''}">${col.html(row)}</td>`
     }
     const field = row[col.f]
     const classes = [c<2 ? `fix${c+1}` : '']
@@ -791,25 +798,72 @@ const cellHtml = (col, row, r, c) => {
     const suffix = col.suffix ? col.suffix(row) : ''
     const offset = col.offset || 0
     const shown = offset ? field.value+offset : field.value
-    return `<td class="${classes.join(' ')}" data-r="${r}" data-f="${col.f}" data-o="${offset}">${prefix}<span>${esc(shown)}</span>${suffix}</td>`
+    return `<td ${attrs} class="${classes.join(' ')}" data-f="${col.f}" data-o="${offset}">${prefix}<span>${esc(shown)}</span>${suffix}</td>`
+}
+
+const focusCell = (td, scroll=false) => {
+    if (!td) return
+    const current = $('view').querySelector('td[tabindex="0"]')
+    if (current) current.tabIndex = -1
+    td.tabIndex = 0
+    state.tableFocus[state.tab] = { row: Number(td.dataset.r), column: Number(td.dataset.c) }
+    td.focus({ preventScroll: true })
+    if (!scroll) return
+    const wrap = td.closest('.table-wrap')
+    const area = wrap.getBoundingClientRect()
+    const cell = td.getBoundingClientRect()
+    const top = area.top + wrap.clientTop + wrap.querySelector('thead').offsetHeight
+    const bottom = area.top + wrap.clientTop + wrap.clientHeight
+    if (cell.top<top) wrap.scrollTop -= top-cell.top
+    else if (cell.bottom>bottom) wrap.scrollTop += cell.bottom-bottom
+    if (!td.classList.contains('fix1') && !td.classList.contains('fix2')) {
+        const left = wrap.querySelector('th.fix2').getBoundingClientRect().right
+        const right = area.left + wrap.clientLeft + wrap.clientWidth
+        if (cell.left<left) wrap.scrollLeft -= left-cell.left
+        else if (cell.right>right) wrap.scrollLeft += cell.right-right
+    }
 }
 
 const renderTable = (tab) => {
     const def = TABS[tab]
     const rows = def.rows()
     const columns = def.columns()
-    const head = columns.map((col, c)=>`<th class="${c<2 ? `fix${c+1}` : ''}">${esc(col.h)}</th>`).join('')
-    const body = rows.map((row, r)=>{
+    // 표시 순서만 바꾸고, 편집·저장은 원래 행 번호와 파일 위치를 사용한다.
+    const orderedRows = rows.map((row, r)=>({ row, r }))
+    if (tab==='officers') {
+        const { key, direction } = state.officerSort
+        orderedRows.sort((a, b)=>{
+            const av = key==='idx' ? a.row.idx : a.row[key].value
+            const bv = key==='idx' ? b.row.idx : b.row[key].value
+            const diff = typeof av==='string' ? av.localeCompare(bv, 'ko') : av-bv
+            return diff*direction || a.row.idx-b.row.idx
+        })
+    }
+    const focus = state.tableFocus[tab]
+    if (!focus || !rows[focus.row] || !columns[focus.column]) {
+        const column = tab==='officers' ? columns.findIndex(col=>col.f===state.officerSort.key) : -1
+        state.tableFocus[tab] = { row: orderedRows[0]?.r, column: column<0 ? 1 : column }
+    }
+    const head = columns.map((col, c)=>{
+        const key = tab==='officers' ? col.sort || col.f : null
+        const sorted = key && key===state.officerSort.key
+        const direction = sorted ? (state.officerSort.direction===1 ? 'ascending' : 'descending') : 'none'
+        const label = esc(col.h) + (sorted ? (direction==='ascending' ? ' ▲' : ' ▼') : '')
+        const content = key ? `<button class="sort-button" data-sort="${key}" title="${esc(col.h)} 정렬">${label}</button>` : label
+        return `<th class="${c<2 ? `fix${c+1}` : ''}"${key ? ` aria-sort="${direction}"` : ''}>${content}</th>`
+    }).join('')
+    const body = orderedRows.map(({ row, r })=>{
         const id = def.rowId ? ` id="${def.rowId(row)}"` : ''
         return `<tr${id}>${columns.map((col, c)=>cellHtml(col, row, r, c)).join('')}</tr>`
     }).join('')
-    $('view').innerHTML = `<div class="table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
+    $('view').innerHTML = `<div class="table-wrap"><table role="grid" aria-label="${def.label}"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`
 
     $('view').querySelectorAll('canvas[data-face]').forEach(canvas=>{
         const key = canvas.dataset.face
         const row = key[0]==='t' ? state.taiki[Number(key.slice(1))-1] : officerByIdx(Number(key))
         drawFace(canvas, row.faceMainId.value, row.faceSubId.value)
     })
+    focusCell($('view').querySelector('td[tabindex="0"]'))
 }
 
 const renderFaces = () => {
@@ -872,8 +926,10 @@ const validate = (key, field, text, offset=0) => {
     return value
 }
 
+let finishEdit = null
+
 const startEdit = (td) => {
-    if (td.querySelector('input')) return
+    if (!td.classList.contains('edit') || td.querySelector('input')) return
     const row = TABS[state.tab].rows()[Number(td.dataset.r)]
     const key = td.dataset.f
     const field = row[key]
@@ -883,13 +939,16 @@ const startEdit = (td) => {
     input.type = field.isNum ? 'number' : 'text'
     input.value = offset ? field.value+offset : field.value
     span.replaceWith(input)
-    input.focus()
+    input.focus({ preventScroll: true })
     input.select()
 
     let done = false
+    let checking = false
     const finish = (commit) => {
-        if (done) return
+        if (done) return true
+        if (checking) return false
         if (commit) {
+            checking = true
             try {
                 field.value = validate(key, field, input.value, offset)
             } catch (e) {
@@ -897,10 +956,13 @@ const startEdit = (td) => {
                 input.title = e.message
                 alert(e.message)
                 input.focus()
-                return
+                return false
+            } finally {
+                checking = false
             }
         }
         done = true
+        finishEdit = null
         if (key==='faceMainId' || key==='faceSubId') {
             row.fullFace.value = row.faceMainId.value | row.faceSubId.value << 8
         }
@@ -912,25 +974,71 @@ const startEdit = (td) => {
         const newWrap = $('view').querySelector('.table-wrap')
         newWrap.scrollTop = scrollTop
         newWrap.scrollLeft = scrollLeft
+        focusCell($('view').querySelector('td[tabindex="0"]'), true)
+        return true
     }
+    finishEdit = finish
     input.addEventListener('keydown', e=>{
-        if (e.key==='Enter') finish(true)
-        if (e.key==='Escape') finish(false)
+        e.stopPropagation()
+        if (e.isComposing) return
+        if (e.key==='ArrowUp' || e.key==='ArrowDown') e.preventDefault()
+        if (e.key==='Enter' || e.key==='Escape') {
+            e.preventDefault()
+            finish(e.key==='Enter')
+        }
     })
     input.addEventListener('blur', ()=>finish(true))
 }
 
-$('view').addEventListener('click', e=>{
-    const link = e.target.closest('[data-goto]')
-    if (link) {
+$('view').addEventListener('keydown', e=>{
+    if (e.target.closest('input') || e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return
+    const td = e.target.closest('td[data-c]')
+    if (!td) return
+    if (e.key==='Enter') {
         e.preventDefault()
-        const target = document.getElementById(link.dataset.goto)
-        if (!target && link.dataset.goto.startsWith('officer-') && state.tab!=='officers') {
+        startEdit(td)
+        return
+    }
+    if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return
+    e.preventDefault()
+    const column = Number(td.dataset.c)
+    let next
+    if (e.key==='ArrowLeft') next = td.previousElementSibling
+    if (e.key==='ArrowRight') next = td.nextElementSibling
+    if (e.key==='ArrowUp') next = td.parentElement.previousElementSibling?.children[column]
+    if (e.key==='ArrowDown') next = td.parentElement.nextElementSibling?.children[column]
+    focusCell(next, true)
+})
+
+const handleTableClick = (e) => {
+    if (e.target.closest('input')) return
+    const sortKey = e.target.closest('[data-sort]')?.dataset.sort
+    const destination = e.target.closest('[data-goto]')?.dataset.goto
+    const td = e.target.closest('td[data-c]')
+    const row = td?.dataset.r
+    const column = td?.dataset.c
+    if (!sortKey && !destination && !td) return
+    e.preventDefault()
+    if (finishEdit && !finishEdit(true)) return
+    if (sortKey) {
+        const left = $('view').querySelector('.table-wrap').scrollLeft
+        const sort = state.officerSort
+        state.officerSort = { key: sortKey, direction: sort.key===sortKey ? -sort.direction : 1 }
+        state.tableFocus.officers = null
+        renderTable('officers')
+        $('view').querySelector('.table-wrap').scrollLeft = left
+        focusCell($('view').querySelector('td[tabindex="0"]'), true)
+        return
+    }
+    if (destination) {
+        const target = document.getElementById(destination)
+        if (!target && destination.startsWith('officer-') && state.tab!=='officers') {
             state.tab = 'officers'
             render()
         }
-        const el = document.getElementById(link.dataset.goto)
+        const el = document.getElementById(destination)
         if (el) {
+            focusCell(el.children[1])
             el.scrollIntoView({ behavior: 'smooth', block: 'center' })
             el.classList.remove('flash')
             void el.offsetWidth
@@ -938,8 +1046,17 @@ $('view').addEventListener('click', e=>{
         }
         return
     }
+    focusCell($('view').querySelector(`td[data-r="${row}"][data-c="${column}"]`), true)
+}
+
+$('view').addEventListener('click', handleTableClick)
+// 편집을 먼저 확정해 다시 그릴 때 클릭할 셀이 사라지는 문제를 막는다.
+$('view').addEventListener('mousedown', e=>{
+    if (finishEdit) handleTableClick(e)
+})
+$('view').addEventListener('dblclick', e=>{
     const td = e.target.closest('td.edit')
-    if (td) startEdit(td)
+    if (td && !e.target.closest('input')) startEdit(td)
 })
 
 $('tabs').addEventListener('click', e=>{

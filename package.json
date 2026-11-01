@@ -1,0 +1,14 @@
+{
+  "name": "rotk2-editor",
+  "private": true,
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "test": "pnpm run test:unit && pnpm run test:ui",
+    "test:unit": "jest --runInBand --config test/jest.config.cjs",
+    "test:ui": "playwright test --config test/playwright.config.cjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "jest": "30.5.2"
+  }
+}
