@@ -72,8 +72,15 @@ const loadFileApi = () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8')
     const script = html.match(/<script>([\s\S]*?)<\/script>/)[1]
     const context = vm.createContext({ TextDecoder })
-    vm.runInContext(script.slice(0, script.indexOf('// 화면')) + '\nthis.api = { parseSaveFile, buildSaveFile, parseTaikiFile, buildTaikiFile, changeOfficerRuler, getOfficerLists }', context)
+    vm.runInContext(script.slice(0, script.indexOf('// 화면')) + '\nthis.api = { parseSaveFile, buildSaveFile, parseTaikiFile, buildTaikiFile, changeOfficerRuler, getOfficerLists, getOfficerMoveOptions, moveOfficerAfter }', context)
     return context.api
 }
 
-module.exports = { makeSave, makeTaiki, makeLinkedSave, loadFileApi }
+const makeNextSave = () => {
+    const bytes = makeLinkedSave()
+    bytes.writeUInt16LE(0, 9874+15*35+2)
+    bytes[9874+15*35+16] = 255
+    return bytes
+}
+
+module.exports = { makeSave, makeTaiki, makeLinkedSave, makeNextSave, loadFileApi }

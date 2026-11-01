@@ -89,6 +89,7 @@
     .sort-button:hover { color: var(--accent); }
     td input, td select { width: 80px; font: inherit; padding: 2px 4px; }
     td select { width: 140px; }
+    td select.link-select { width: 240px; }
     td input.invalid, td select.invalid { border-color: var(--error); outline: 1px solid var(--error); }
     td canvas { display: block; image-rendering: pixelated; }
     a.link { color: var(--accent); cursor: pointer; text-decoration: underline; }
@@ -569,6 +570,41 @@ const changeOfficerRuler = (officers, lands, rulers, officerIdx, rulerIdx) => {
     officer.family.value = ruler.idx
 }
 
+const getOfficerMoveOptions = (officers, lands, rulers, officerIdx) => {
+    const officer = officers.find(o=>o.idx===officerIdx)
+    const rulerNo = officer?.rulerNum.value===254 ? 15 : officer?.rulerNum.value
+    const ruler = rulers.find(r=>r.idx===rulerNo+1)
+    if (!officer || !ruler || !officers.some(o=>o.idx===ruler.rulerIdx)) {
+        throw new Error('먼저 Rulers 목록에서 소속 군주를 선택하세요')
+    }
+    const lists = getOfficerLists(officers, lands)
+    const territories = lists.filter(list=>list.key==='gov' && list.land.ruler.value===rulerNo && list.rows.length)
+    return { officer, lists, territories }
+}
+
+const moveOfficerAfter = (officers, lands, rulers, officerIdx, landIdx, afterIdx) => {
+    if (officerIdx===afterIdx) throw new Error('자기 자신 뒤에는 넣을 수 없습니다')
+    const { officer, lists, territories } = getOfficerMoveOptions(officers, lands, rulers, officerIdx)
+    const target = territories.find(list=>list.land.idx===landIdx)
+    const after = target?.rows.find(o=>o.idx===afterIdx)
+    if (!after) throw new Error('소속 군주의 통치지역에서 끼워 넣을 장수를 선택하세요')
+    const sources = lists.filter(list=>list.rows.includes(officer))
+    if (sources.length>1 || lists.filter(list=>list.rows.includes(after)).length!==1) {
+        throw new Error('장수가 여러 목록에 중복으로 연결되어 있습니다')
+    }
+
+    // 먼저 빼낸 뒤 목적지의 다음 주소를 읽어, 같은 목록 이동도 순환 없이 처리한다.
+    const source = sources[0]
+    if (source) {
+        const at = source.rows.indexOf(officer)
+        const previous = source.rows[at-1]
+        if (previous) previous.nextOfficer.value = officer.nextOfficer.value
+        else source.land[source.key].value = offsetFromIdx(officer.nextOfficer.value)
+    }
+    officer.nextOfficer.value = after.nextOfficer.value
+    after.nextOfficer.value = officer.idx
+}
+
 // ---------------------------------------------------------------------------
 // 얼굴 (KAODATA.DAT / MONTAGE.DAT)
 //   8 color, 3바이트로 8픽셀, green / blue / red 순서. 한 줄을 두 줄로 그린다.
@@ -741,9 +777,10 @@ const officerColumns = () => [
         if (!leader) return '무소속'
         return leader.idx===o.idx ? '군주' : leader.name.value
     } },
-    { h: '다음', f: 'nextOfficer', html: o=>{
+    { h: '다음', f: 'nextOfficer', editable: true, canEdit: o=>o.rulerNum.value!==255,
+      text: o=>officerName(o.nextOfficer.value), suffix: o=>{
         const next = officerByIdx(o.nextOfficer.value)
-        return next ? officerLink(next.idx, next.name.value) : '-'
+        return next ? ` ${officerLink(next.idx, '↗')}` : ''
     } },
     edit('Family', 'family'),
     edit('Ex1', 'unknown1'),
@@ -854,7 +891,7 @@ const cellHtml = (col, row, r, c) => {
     }
     const field = row[col.f]
     const classes = [c<2 ? `fix${c+1}` : '']
-    const editable = field.editable && (!col.canEdit || col.canEdit(row))
+    const editable = (field.editable || col.editable) && (!col.canEdit || col.canEdit(row))
     if (editable) classes.push('edit')
     if (field.value!==field.orig) classes.push('changed')
     const prefix = col.prefix ? col.prefix(row) : ''
@@ -1001,8 +1038,27 @@ const startEdit = (td) => {
     const offset = Number(td.dataset.o || 0)
     const span = td.querySelector('span')
     const isRuler = state.tab==='officers' && key==='rulerNum'
-    const input = document.createElement(isRuler ? 'select' : 'input')
-    if (isRuler) {
+    const isLink = state.tab==='officers' && key==='nextOfficer'
+    let linkOptions, linkLand = 0, linkStep = 1
+    if (isLink) {
+        try {
+            linkOptions = getOfficerMoveOptions(state.officers, state.lands, state.rulers, row.idx)
+        } catch (e) {
+            alert(e.message)
+            return
+        }
+    }
+    const input = document.createElement(isRuler || isLink ? 'select' : 'input')
+    if (isLink) {
+        input.classList.add('link-select')
+        input.setAttribute('aria-label', '통치지역 선택')
+        input.innerHTML = '<option value="" disabled>1. 통치지역(태수) 선택</option>' + linkOptions.territories.map(list=>{
+            const governor = list.rows[0]
+            const disabled = list.rows.every(o=>o.idx===row.idx) ? ' disabled' : ''
+            return `<option value="${list.land.idx}"${disabled}>${list.land.idx}번 땅 · ${esc(governor.name.value)} (${governor.idx})</option>`
+        }).join('')
+        input.value = ''
+    } else if (isRuler) {
         const options = state.rulers.filter(r=>officerByIdx(r.rulerIdx))
         input.innerHTML = '<option value="" disabled>군주 선택</option>' + options.map(r=>`<option value="${r.idx}">${r.idx}. ${esc(officerName(r.rulerIdx))}</option>`).join('')
         const current = field.value===254 ? 16 : field.value+1
@@ -1013,7 +1069,20 @@ const startEdit = (td) => {
     }
     span.replaceWith(input)
     input.focus({ preventScroll: true })
-    if (!isRuler) input.select()
+    if (!isRuler && !isLink) input.select()
+
+    const chooseLinkLand = () => {
+        const territory = linkOptions.territories.find(list=>list.land.idx===Number(input.value))
+        if (!territory) return
+        linkLand = territory.land.idx
+        linkStep = 2
+        input.setAttribute('aria-label', '뒤에 넣을 장수 선택')
+        input.innerHTML = '<option value="" disabled>2. 뒤에 넣을 장수 선택</option>' + territory.rows.filter(o=>o.idx!==row.idx).map(o=>`<option value="${o.idx}">${esc(o.name.value)} (${o.idx}) 뒤</option>`).join('')
+        input.value = ''
+    }
+    if (isLink) input.addEventListener('change', ()=>{
+        if (linkStep===1 && input.value) chooseLinkLand()
+    })
 
     let done = false
     let checking = false
@@ -1024,6 +1093,7 @@ const startEdit = (td) => {
             checking = true
             try {
                 if (isRuler) changeOfficerRuler(state.officers, state.lands, state.rulers, row.idx, Number(input.value))
+                else if (isLink) moveOfficerAfter(state.officers, state.lands, state.rulers, row.idx, linkLand, Number(input.value))
                 else field.value = validate(key, field, input.value, offset)
             } catch (e) {
                 input.classList.add('invalid')
@@ -1051,23 +1121,35 @@ const startEdit = (td) => {
         focusCell($('view').querySelector('td[tabindex="0"]'), true)
         return true
     }
-    finishEdit = finish
+    // 바깥을 클릭하면 완성한 선택만 확정하고, 중간 단계는 취소한다.
+    const finishFromOutside = (commit)=>finish(commit && (!isLink || (linkStep===2 && input.value!=='')))
+    finishEdit = finishFromOutside
     input.addEventListener('keydown', e=>{
         e.stopPropagation()
         if (e.isComposing) return
         if (e.key==='ArrowUp' || e.key==='ArrowDown') {
             e.preventDefault()
-            if (isRuler && input.options.length>1) {
+            if (isRuler || isLink) {
+                const options = [...input.options].filter(option=>!option.disabled)
+                const current = options.findIndex(option=>option.value===input.value)
                 const step = e.key==='ArrowDown' ? 1 : -1
-                input.selectedIndex = Math.max(1, Math.min(input.options.length-1, input.selectedIndex+step))
+                const next = options[Math.max(0, Math.min(options.length-1, current+step))]
+                if (next) input.value = next.value
             }
         }
         if (e.key==='Enter' || e.key==='Escape') {
             e.preventDefault()
+            if (e.key==='Enter' && isLink) {
+                if (!input.value) return
+                if (linkStep===1) {
+                    chooseLinkLand()
+                    return
+                }
+            }
             finish(e.key==='Enter')
         }
     })
-    input.addEventListener('blur', ()=>finish(true))
+    input.addEventListener('blur', ()=>finishFromOutside(true))
 }
 
 $('view').addEventListener('keydown', e=>{
