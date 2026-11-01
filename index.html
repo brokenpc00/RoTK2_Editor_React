@@ -904,7 +904,14 @@ const startEdit = (td) => {
         if (key==='faceMainId' || key==='faceSubId') {
             row.fullFace.value = row.faceMainId.value | row.faceSubId.value << 8
         }
+        // 표를 다시 그려도 편집하던 스크롤 위치를 유지한다.
+        const wrap = td.closest('.table-wrap')
+        const scrollTop = wrap.scrollTop
+        const scrollLeft = wrap.scrollLeft
         renderTable(state.tab)
+        const newWrap = $('view').querySelector('.table-wrap')
+        newWrap.scrollTop = scrollTop
+        newWrap.scrollLeft = scrollLeft
     }
     input.addEventListener('keydown', e=>{
         if (e.key==='Enter') finish(true)
