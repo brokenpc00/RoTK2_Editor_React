@@ -87,8 +87,9 @@
     td.changed { background: var(--changed); }
     .sort-button { border: 0; border-radius: 0; padding: 0; color: inherit; font-weight: inherit; }
     .sort-button:hover { color: var(--accent); }
-    td input { width: 80px; font: inherit; padding: 2px 4px; }
-    td input.invalid { border-color: var(--error); outline: 1px solid var(--error); }
+    td input, td select { width: 80px; font: inherit; padding: 2px 4px; }
+    td select { width: 140px; }
+    td input.invalid, td select.invalid { border-color: var(--error); outline: 1px solid var(--error); }
     td canvas { display: block; image-rendering: pixelated; }
     a.link { color: var(--accent); cursor: pointer; text-decoration: underline; }
     a.prev { margin-right: 6px; text-decoration: none; }
@@ -160,6 +161,8 @@ const setVal = (cellType, index, pos, size, value, isNum=true, editable=true) =>
 const idxFromOffset = (offset) => {
     return offset>0?((offset - 88)/36 + 1):0
 }
+
+const offsetFromIdx = (idx) => idx>0 ? 88+(idx-1)*OFFICER_SIZE : 0
 
 // 이름 뒤의 0x00 채움은 빼고 보여준다 (저장할 때 다시 0x00으로 채운다).
 const decodeName = (bytes) => new TextDecoder('euc-kr').decode(bytes).replace(/\0+$/, '')
@@ -471,7 +474,9 @@ const writeField = (out, base, key, field) => {
     } else if (field.size===1) {
         out[at] = key==='rulerNum' && value===254 ? 15 : value
     } else if (field.size===2) {
-        const v = key==='family' ? (value===0 ? 0 : Math.pow(2, value-1)) : value
+        let v = value
+        if (key==='family') v = value===0 ? 0 : Math.pow(2, value-1)
+        if (key==='nextOfficer') v = offsetFromIdx(value)
         out[at] = v & 0xff
         out[at+1] = (v>>8) & 0xff
     } else if (field.size===4) {
@@ -485,7 +490,8 @@ const writeField = (out, base, key, field) => {
 const writeRow = (out, base, row) => {
     Object.keys(row).forEach(k=>{
         const field = row[k]
-        if (field && typeof field==='object' && 'pos' in field && field.editable && field.value!==field.orig) {
+        const linked = ['nextOfficer', 'gov', 'freeAgent', 'hideAgent'].includes(k)
+        if (field && typeof field==='object' && 'pos' in field && (field.editable || linked) && field.value!==field.orig) {
             writeField(out, base, k, field)
         }
     })
@@ -502,6 +508,65 @@ const buildTaikiFile = (data, taiki) => {
     const out = data.slice()
     taiki.forEach(t=>writeRow(out, TAIKI_HEADER_SIZE + (t.idx-1)*TAIKI_SIZE, t))
     return out
+}
+
+// 지역의 시작 주소부터 소속·재야·미발견 장수 목록을 읽는다.
+const getOfficerLists = (officers, lands) => {
+    const byIdx = new Map(officers.map(o=>[o.idx, o]))
+    const lists = []
+    for (const land of lands) {
+        for (const key of ['gov', 'freeAgent', 'hideAgent']) {
+            const rows = []
+            const seen = new Set()
+            let idx = idxFromOffset(land[key].value)
+            while (idx) {
+                const row = byIdx.get(idx)
+                if (!row || seen.has(idx)) throw new Error(`${land.idx}번 땅의 장수 연결이 올바르지 않습니다`)
+                seen.add(idx)
+                rows.push(row)
+                idx = row.nextOfficer.value
+            }
+            lists.push({ land, key, rows })
+        }
+    }
+    return lists
+}
+
+const changeOfficerRuler = (officers, lands, rulers, officerIdx, rulerIdx) => {
+    const officer = officers.find(o=>o.idx===officerIdx)
+    const ruler = rulers.find(r=>r.idx===rulerIdx)
+    const leader = officers.find(o=>o.idx===ruler?.rulerIdx)
+    if (!officer || !ruler || !leader) throw new Error('Rulers 목록에서 군주를 선택하세요')
+    const rulerNum = ruler.idx===16 ? 254 : ruler.idx-1
+    if (officer.rulerNum.value===rulerNum) return
+    if (rulers.some(r=>r.rulerIdx===officer.idx)) throw new Error('군주 본인의 소속 변경은 지원하지 않습니다')
+
+    // 연결과 목적지를 먼저 확인해 실패하면 원래 값을 그대로 둔다.
+    const lists = getOfficerLists(officers, lands)
+    const sources = lists.filter(list=>list.rows.includes(officer))
+    const targets = lists.filter(list=>list.key==='gov' && list.rows.includes(leader))
+    if (sources.length>1) throw new Error('이 장수가 여러 땅의 목록에 중복으로 연결되어 있습니다')
+    if (targets.length!==1) throw new Error('선택한 군주가 있는 땅을 확인할 수 없습니다')
+    const source = sources[0]
+    const targetRows = targets[0].rows.filter(o=>o!==officer)
+    const last = targetRows[targetRows.length-1]
+    if (!last) throw new Error('이동할 장수 목록을 확인할 수 없습니다')
+
+    if (source) {
+        const at = source.rows.indexOf(officer)
+        const previous = source.rows[at-1]
+        if (previous) previous.nextOfficer.value = officer.nextOfficer.value
+        else source.land[source.key].value = offsetFromIdx(officer.nextOfficer.value)
+    }
+    last.nextOfficer.value = officer.idx
+    officer.nextOfficer.value = 0
+    officer.rulerNum.value = rulerNum
+    officer.loyalty.value = 100
+    officer.army.value = 10000
+    officer.weapon.value = 10000
+    officer.train.value = 100
+    officer.syn.value = leader.syn.value
+    officer.family.value = ruler.idx
 }
 
 // ---------------------------------------------------------------------------
@@ -669,17 +734,14 @@ const officerColumns = () => [
     edit('Army', 'army'),
     edit('Weapon', 'weapon'),
     edit('Training', 'train'),
-    { h: 'Ruler Name', html: o=>{
-        const ruler = officerByIdx(o.rulerNum.value+1)
-        if (!ruler) return '무소속'
-        if (ruler.idx===o.idx) return '군주'
-        const rulersRuler = officerByIdx(ruler.rulerNum.value+1)
-        if (!rulersRuler) return '무소속'
-        // 군주는 최상위이므로 군주의 군주는 자기 자신이어야 한다.
-        if (rulersRuler.idx===ruler.idx) return officerLink(ruler.idx, ruler.name.value)
-        return esc(`${ruler.name.value}(이)라고 하는데 군주일듯`)
+    { h: 'Ruler Name', f: 'rulerNum', canEdit: o=>!state.rulers.some(r=>r.rulerIdx===o.idx), text: o=>{
+        const rulerIdx = o.rulerNum.value===254 ? 16 : o.rulerNum.value+1
+        const ruler = state.rulers.find(r=>r.idx===rulerIdx)
+        const leader = officerByIdx(ruler?.rulerIdx)
+        if (!leader) return '무소속'
+        return leader.idx===o.idx ? '군주' : leader.name.value
     } },
-    { h: '다음', html: o=>{
+    { h: '다음', f: 'nextOfficer', html: o=>{
         const next = officerByIdx(o.nextOfficer.value)
         return next ? officerLink(next.idx, next.name.value) : '-'
     } },
@@ -706,8 +768,8 @@ const rulerColumns = () => {
 }
 
 const landRuler = (rulerNo) => {
-    if (rulerNo===255) return '-'
-    return esc(officerName(rulerNo===15 ? 255 : rulerNo+1))
+    const ruler = state.rulers.find(r=>r.idx===rulerNo+1)
+    return ruler ? esc(officerName(ruler.rulerIdx)) : '-'
 }
 
 const landAgent = (offset, empty) => {
@@ -719,7 +781,7 @@ const landAgent = (offset, empty) => {
 const landColumns = () => [
     { h: 'No', html: l=>l.idx },
     { h: 'Province Name', html: l=>esc(`${l.provName}(${l.idx})`) },
-    { h: 'Goverment', html: l=>landAgent(l.gov.value, '-') },
+    { h: 'Goverment', f: 'gov', html: l=>landAgent(l.gov.value, '-') },
     edit('Gold', 'gold'),
     edit('Food', 'food'),
     edit('Population', 'pop'),
@@ -741,8 +803,8 @@ const landColumns = () => [
     edit('Ex2', 'unknown2'),
     edit('Ex3', 'unknown3'),
     edit('Ex4', 'unknown4'),
-    { h: 'Free Agent', html: l=>landAgent(l.freeAgent.value, 'Wrong Data') },
-    { h: 'Hide Agent', html: l=>landAgent(l.hideAgent.value, 'Wrong Data') },
+    { h: 'Free Agent', f: 'freeAgent', html: l=>landAgent(l.freeAgent.value, 'Wrong Data') },
+    { h: 'Hide Agent', f: 'hideAgent', html: l=>landAgent(l.hideAgent.value, 'Wrong Data') },
     { h: 'Next City', html: l=>{
         if (!(l.nextCity.value>0)) return '-'
         const next = state.lands[(l.nextCity.value-9895)/35-1]
@@ -792,13 +854,16 @@ const cellHtml = (col, row, r, c) => {
     }
     const field = row[col.f]
     const classes = [c<2 ? `fix${c+1}` : '']
-    if (field.editable) classes.push('edit')
+    const editable = field.editable && (!col.canEdit || col.canEdit(row))
+    if (editable) classes.push('edit')
     if (field.value!==field.orig) classes.push('changed')
     const prefix = col.prefix ? col.prefix(row) : ''
     const suffix = col.suffix ? col.suffix(row) : ''
     const offset = col.offset || 0
-    const shown = offset ? field.value+offset : field.value
-    return `<td ${attrs} class="${classes.join(' ')}" data-f="${col.f}" data-o="${offset}">${prefix}<span>${esc(shown)}</span>${suffix}</td>`
+    const shown = col.text ? col.text(row) : offset ? field.value+offset : field.value
+    const content = col.html ? col.html(row) : esc(shown)
+    const title = !editable && col.f==='rulerNum' ? ' title="군주 본인의 소속 변경은 지원하지 않습니다"' : ''
+    return `<td ${attrs}${title} aria-readonly="${!editable}" class="${classes.join(' ')}" data-f="${col.f}" data-o="${offset}">${prefix}<span>${content}</span>${suffix}</td>`
 }
 
 const focusCell = (td, scroll=false) => {
@@ -929,18 +994,26 @@ const validate = (key, field, text, offset=0) => {
 let finishEdit = null
 
 const startEdit = (td) => {
-    if (!td.classList.contains('edit') || td.querySelector('input')) return
+    if (!td.classList.contains('edit') || td.querySelector('input, select')) return
     const row = TABS[state.tab].rows()[Number(td.dataset.r)]
     const key = td.dataset.f
     const field = row[key]
     const offset = Number(td.dataset.o || 0)
     const span = td.querySelector('span')
-    const input = document.createElement('input')
-    input.type = field.isNum ? 'number' : 'text'
-    input.value = offset ? field.value+offset : field.value
+    const isRuler = state.tab==='officers' && key==='rulerNum'
+    const input = document.createElement(isRuler ? 'select' : 'input')
+    if (isRuler) {
+        const options = state.rulers.filter(r=>officerByIdx(r.rulerIdx))
+        input.innerHTML = '<option value="" disabled>군주 선택</option>' + options.map(r=>`<option value="${r.idx}">${r.idx}. ${esc(officerName(r.rulerIdx))}</option>`).join('')
+        const current = field.value===254 ? 16 : field.value+1
+        input.value = options.some(r=>r.idx===current) ? String(current) : ''
+    } else {
+        input.type = field.isNum ? 'number' : 'text'
+        input.value = offset ? field.value+offset : field.value
+    }
     span.replaceWith(input)
     input.focus({ preventScroll: true })
-    input.select()
+    if (!isRuler) input.select()
 
     let done = false
     let checking = false
@@ -950,7 +1023,8 @@ const startEdit = (td) => {
         if (commit) {
             checking = true
             try {
-                field.value = validate(key, field, input.value, offset)
+                if (isRuler) changeOfficerRuler(state.officers, state.lands, state.rulers, row.idx, Number(input.value))
+                else field.value = validate(key, field, input.value, offset)
             } catch (e) {
                 input.classList.add('invalid')
                 input.title = e.message
@@ -981,7 +1055,13 @@ const startEdit = (td) => {
     input.addEventListener('keydown', e=>{
         e.stopPropagation()
         if (e.isComposing) return
-        if (e.key==='ArrowUp' || e.key==='ArrowDown') e.preventDefault()
+        if (e.key==='ArrowUp' || e.key==='ArrowDown') {
+            e.preventDefault()
+            if (isRuler && input.options.length>1) {
+                const step = e.key==='ArrowDown' ? 1 : -1
+                input.selectedIndex = Math.max(1, Math.min(input.options.length-1, input.selectedIndex+step))
+            }
+        }
         if (e.key==='Enter' || e.key==='Escape') {
             e.preventDefault()
             finish(e.key==='Enter')
@@ -991,7 +1071,7 @@ const startEdit = (td) => {
 }
 
 $('view').addEventListener('keydown', e=>{
-    if (e.target.closest('input') || e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return
+    if (e.target.closest('input, select') || e.isComposing || e.ctrlKey || e.altKey || e.metaKey) return
     const td = e.target.closest('td[data-c]')
     if (!td) return
     if (e.key==='Enter') {
@@ -1011,7 +1091,7 @@ $('view').addEventListener('keydown', e=>{
 })
 
 const handleTableClick = (e) => {
-    if (e.target.closest('input')) return
+    if (e.target.closest('input, select')) return
     const sortKey = e.target.closest('[data-sort]')?.dataset.sort
     const destination = e.target.closest('[data-goto]')?.dataset.goto
     const td = e.target.closest('td[data-c]')
@@ -1056,7 +1136,7 @@ $('view').addEventListener('mousedown', e=>{
 })
 $('view').addEventListener('dblclick', e=>{
     const td = e.target.closest('td.edit')
-    if (td && !e.target.closest('input')) startEdit(td)
+    if (td && !e.target.closest('input, select')) startEdit(td)
 })
 
 $('tabs').addEventListener('click', e=>{

@@ -36,12 +36,44 @@ const makeTaiki = () => {
     return bytes
 }
 
+const makeLinkedSave = () => {
+    const bytes = makeSave()
+    const pointer = idx=>idx ? 88+(idx-1)*36 : 0
+    const list = (land, key, ids, ruler=255) => {
+        const offset = { gov: 2, freeAgent: 4, hideAgent: 6 }[key]
+        bytes.writeUInt16LE(pointer(ids[0]), 9874+(land-1)*35+offset)
+        for (let i=0; i<ids.length; i++) {
+            bytes.writeUInt16LE(pointer(ids[i+1]), 32+(ids[i]-1)*36)
+            bytes[32+(ids[i]-1)*36+10] = ruler
+        }
+        if (key==='gov') bytes[9874+(land-1)*35+16] = ruler
+    }
+    list(4, 'gov', [2, 41, 42], 1)
+    list(5, 'gov', [1, 30], 0)
+    list(10, 'gov', [9, 47, 53, 78], 8)
+    list(11, 'gov', [16, 83, 110], 8)
+    list(12, 'gov', [17, 68, 94], 8)
+    list(15, 'gov', [80, 81], 3)
+    list(20, 'gov', [255, 254], 15)
+    list(13, 'freeAgent', [100, 101])
+    list(14, 'hideAgent', [102, 103])
+    list(16, 'gov', [104], 8)
+    for (const [slot, idx, land, sync] of [[1, 1, 5, 1], [2, 2, 4, 50], [9, 9, 10, 60], [4, 80, 15, 77], [16, 255, 20, 91]]) {
+        const base = 9218+(slot-1)*41
+        bytes.writeUInt16LE(pointer(idx), base)
+        bytes.writeUInt16LE(9930+(land-1)*35, base+2)
+        bytes[32+(idx-1)*36+15] = sync
+        bytes.writeUInt16LE(1 << (slot-1), 32+(idx-1)*36+16)
+    }
+    return bytes
+}
+
 const loadFileApi = () => {
     const html = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8')
     const script = html.match(/<script>([\s\S]*?)<\/script>/)[1]
     const context = vm.createContext({ TextDecoder })
-    vm.runInContext(script.slice(0, script.indexOf('// 화면')) + '\nthis.api = { parseSaveFile, buildSaveFile, parseTaikiFile, buildTaikiFile }', context)
+    vm.runInContext(script.slice(0, script.indexOf('// 화면')) + '\nthis.api = { parseSaveFile, buildSaveFile, parseTaikiFile, buildTaikiFile, changeOfficerRuler, getOfficerLists }', context)
     return context.api
 }
 
-module.exports = { makeSave, makeTaiki, loadFileApi }
+module.exports = { makeSave, makeTaiki, makeLinkedSave, loadFileApi }
